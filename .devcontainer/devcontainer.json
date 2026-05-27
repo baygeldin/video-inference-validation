@@ -1,0 +1,25 @@
+{
+  "name": "video-inference-validation",
+  "build": {
+    "dockerfile": "Dockerfile.dev"
+  },
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind",
+  "workspaceFolder": "/workspace",
+  "postCreateCommand": "make install",
+  "containerEnv": {
+    "CODEX_HOME": "/workspace/.codex"
+  },
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
+        "python.terminal.activateEnvironment": false
+      },
+      "extensions": [
+        "openai.chatgpt",
+        "ms-python.python",
+        "ms-python.vscode-pylance"
+      ]
+    }
+  }
+}
