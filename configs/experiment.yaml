@@ -1,0 +1,145 @@
+artifact_root: /workspace/runs
+hf_home: /workspace/hf-cache
+model: Wan-AI/Wan2.2-T2V-A14B-Diffusers
+latent_dtype: float16
+
+request_defaults:
+  width: 832
+  height: 480
+  num_frames: 81
+  fps: 16
+  num_inference_steps: 40
+  guidance_scale: 4.0
+  guidance_scale_2: 4.0
+  boundary_ratio: 0.875
+  flow_shift: 5.0
+  negative_prompt: "low quality, blurry, static, distorted, artifacts"
+
+generation_configs:
+  - id: canonical_h100_bf16_tp1
+    label: H100/H200 canonical BF16 TP-1
+    enabled: true
+    expected_gpu: NVIDIA H100 80GB HBM3
+    gpu_count: 1
+    server:
+      tensor_parallel_size: 1
+      boundary_ratio: 0.875
+      flow_shift: 5.0
+      cache_backend: none
+    request_overrides: {}
+
+  - id: benign_a100_bf16_tp1
+    label: A100 benign BF16 TP-1
+    enabled: true
+    expected_gpu: NVIDIA A100 80GB PCIe
+    gpu_count: 1
+    server:
+      tensor_parallel_size: 1
+      boundary_ratio: 0.875
+      flow_shift: 5.0
+      cache_backend: none
+    request_overrides: {}
+
+  - id: benign_h100_bf16_tp4
+    label: H100 benign BF16 TP-4
+    enabled: true
+    expected_gpu: NVIDIA H100 80GB HBM3
+    gpu_count: 4
+    server:
+      tensor_parallel_size: 4
+      boundary_ratio: 0.875
+      flow_shift: 5.0
+      cache_backend: none
+    request_overrides: {}
+
+  - id: benign_a100_bf16_tp4
+    label: A100 benign BF16 TP-4
+    enabled: true
+    expected_gpu: NVIDIA A100 80GB PCIe
+    gpu_count: 4
+    server:
+      tensor_parallel_size: 4
+      boundary_ratio: 0.875
+      flow_shift: 5.0
+      cache_backend: none
+    request_overrides: {}
+
+  - id: malign_h100_steps39
+    label: H100 malign 39 denoising steps
+    enabled: true
+    expected_gpu: NVIDIA H100 80GB HBM3
+    gpu_count: 1
+    server:
+      tensor_parallel_size: 1
+      boundary_ratio: 0.875
+      flow_shift: 5.0
+      cache_backend: none
+    request_overrides:
+      num_inference_steps: 39
+
+  - id: malign_h100_steps30
+    label: H100 malign 30 denoising steps
+    enabled: true
+    expected_gpu: NVIDIA H100 80GB HBM3
+    gpu_count: 1
+    server:
+      tensor_parallel_size: 1
+      boundary_ratio: 0.875
+      flow_shift: 5.0
+      cache_backend: none
+    request_overrides:
+      num_inference_steps: 30
+
+  - id: malign_h100_cfg_disabled
+    label: H100 malign CFG disabled
+    enabled: true
+    expected_gpu: NVIDIA H100 80GB HBM3
+    gpu_count: 1
+    server:
+      tensor_parallel_size: 1
+      boundary_ratio: 0.875
+      flow_shift: 5.0
+      cache_backend: none
+    request_overrides:
+      guidance_scale: 1.0
+      guidance_scale_2: 1.0
+      negative_prompt: ""
+
+  - id: malign_h100_cache_dit
+    label: H100 malign Cache-DiT enabled
+    enabled: true
+    expected_gpu: NVIDIA H100 80GB HBM3
+    gpu_count: 1
+    server:
+      tensor_parallel_size: 1
+      boundary_ratio: 0.875
+      flow_shift: 5.0
+      cache_backend: cache_dit
+      enable_cache_dit_summary: true
+    request_overrides: {}
+
+  - id: malign_h100_different_seed
+    label: H100 malign different seed
+    enabled: true
+    expected_gpu: NVIDIA H100 80GB HBM3
+    gpu_count: 1
+    seed_offset: 1000000
+    server:
+      tensor_parallel_size: 1
+      boundary_ratio: 0.875
+      flow_shift: 5.0
+      cache_backend: none
+    request_overrides: {}
+
+  - id: malign_h100_fp8
+    label: H100 malign FP8 placeholder
+    enabled: false
+    expected_gpu: NVIDIA H100 80GB HBM3
+    gpu_count: 1
+    note: Disabled until vLLM-Omni Wan2.2 FP8 support is validated.
+    server:
+      tensor_parallel_size: 1
+      boundary_ratio: 0.875
+      flow_shift: 5.0
+      cache_backend: none
+    request_overrides: {}
