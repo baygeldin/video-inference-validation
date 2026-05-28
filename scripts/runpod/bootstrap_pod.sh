@@ -23,10 +23,6 @@ if [[ -z "${HF_TOKEN:-}" ]]; then
   warn "HF_TOKEN is not set; public models may still work, but downloads can be rate-limited"
 fi
 
-if [[ -z "${AWS_ACCESS_KEY_ID:-}" || -z "${AWS_SECRET_ACCESS_KEY:-}" ]]; then
-  warn "Runpod S3 credentials are not set; viv sync-artifacts will not be able to execute"
-fi
-
 python3 --version
 python3 -m pip show video-inference-validation >/dev/null || fail "video-inference-validation package is not installed"
 command -v vllm >/dev/null || fail "vllm command not found"

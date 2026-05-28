@@ -100,15 +100,4 @@ Inspect completion:
 viv inspect-run --run-id pilot-001 --artifact-root /workspace/runs
 ```
 
-## Export Or Sync
-
-To print the Runpod S3-compatible sync command:
-
-```bash
-viv sync-artifacts \
-  --run-id pilot-001 \
-  --datacenter US-KS-2 \
-  --network-volume-id YOUR_NETWORK_VOLUME_ID
-```
-
-Add `--execute` to run it. Configure `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` with your Runpod S3 API credentials first.
+The RunPod network volume is the durable store for this experiment. Keep the volume attached when running jobs, and access artifacts from `/workspace/runs/<run_id>` in any Pod that mounts the same volume.

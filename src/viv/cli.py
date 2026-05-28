@@ -60,15 +60,6 @@ def main(argv: list[str] | None = None) -> int:
     inspect_p.add_argument("--no-require-latents", action="store_true")
     inspect_p.set_defaults(func=cmd_inspect_run)
 
-    sync_p = sub.add_parser("sync-artifacts", help="Print or run an aws s3 sync command")
-    sync_p.add_argument("--run-id", required=True)
-    sync_p.add_argument("--datacenter", required=True)
-    sync_p.add_argument("--network-volume-id", required=True)
-    sync_p.add_argument("--artifact-root", default="/workspace/runs")
-    sync_p.add_argument("--remote-prefix", default="runs")
-    sync_p.add_argument("--execute", action="store_true")
-    sync_p.set_defaults(func=cmd_sync_artifacts)
-
     serve_p = sub.add_parser("serve", help="Exec vLLM-Omni with env vars for one generation config")
     serve_p.add_argument("--config", default="configs/experiment.yaml")
     serve_p.add_argument("--config-id", required=True)
@@ -189,27 +180,6 @@ def cmd_inspect_run(args: argparse.Namespace) -> int:
         if len(missing) > 200:
             print(f"  ... {len(missing) - 200} more")
         return 1
-    return 0
-
-
-def cmd_sync_artifacts(args: argparse.Namespace) -> int:
-    local_dir = Path(args.artifact_root) / args.run_id
-    endpoint = f"https://s3api-{args.datacenter.lower()}.runpod.io/"
-    remote = f"s3://{args.network_volume_id}/{args.remote_prefix.strip('/')}/{args.run_id}"
-    command = [
-        "aws",
-        "s3",
-        "sync",
-        "--region",
-        args.datacenter,
-        "--endpoint-url",
-        endpoint,
-        str(local_dir),
-        remote,
-    ]
-    print(" ".join(command))
-    if args.execute:
-        return subprocess.call(command)
     return 0
 
 

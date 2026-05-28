@@ -13,8 +13,6 @@
   "env": {
     "HF_HOME": "/workspace/hf-cache",
     "VIV_ARTIFACT_ROOT": "/workspace/runs",
-    "HF_TOKEN": "REPLACE_OR_REMOVE",
-    "AWS_ACCESS_KEY_ID": "REPLACE_OR_REMOVE",
-    "AWS_SECRET_ACCESS_KEY": "REPLACE_OR_REMOVE"
+    "HF_TOKEN": "REPLACE_OR_REMOVE"
   }
 }
