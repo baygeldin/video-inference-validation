@@ -1,9 +1,11 @@
-FROM nvidia/cuda:12.4.1-cudnn-devel-ubuntu22.04
+FROM nvidia/cuda:13.0.2-devel-ubuntu24.04
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
     UV_SYSTEM_PYTHON=1 \
-    HF_HOME=/workspace/hf-cache
+    UV_TORCH_BACKEND=auto \
+    HF_HOME=/workspace/hf-cache \
+    VLLM_OMNI_TARGET_DEVICE=cuda
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
@@ -19,7 +21,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     rsync \
     && rm -rf /var/lib/apt/lists/*
 
-RUN python3 -m pip install --no-cache-dir --upgrade pip uv
+RUN python3 -m pip install --break-system-packages --no-cache-dir --upgrade pip uv
 
 WORKDIR /opt/video-inference-validation
 COPY pyproject.toml README.md ./
@@ -28,8 +30,11 @@ COPY configs ./configs
 COPY runtime_patches ./runtime_patches
 COPY scripts ./scripts
 
-RUN python3 -m pip install --no-cache-dir -e /opt/video-inference-validation \
-    && python3 -m pip install --no-cache-dir git+https://github.com/vllm-project/vllm-omni.git
+RUN uv pip install -e /opt/video-inference-validation \
+    && uv pip install vllm==0.20.0 --torch-backend=auto \
+    && git clone --branch v0.20.0 --depth 1 https://github.com/vllm-project/vllm-omni.git /opt/vllm-omni \
+    && cd /opt/vllm-omni \
+    && uv pip install -e .
 
 WORKDIR /workspace
 CMD ["/bin/bash"]

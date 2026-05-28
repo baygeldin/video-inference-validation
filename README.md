@@ -42,7 +42,7 @@ PUSH=1 \
 scripts/runpod/build_image.sh
 ```
 
-The Docker build installs vLLM-Omni from upstream and enables latent capture through `runtime_patches/sitecustomize.py`. No vLLM-Omni source files are edited in the image.
+The Docker build uses CUDA 13.0.2, installs `vllm==0.20.0`, clones `vllm-omni` at tag `v0.20.0`, and installs it editable from source. Latent capture is enabled through `runtime_patches/sitecustomize.py`; no vLLM-Omni source files are edited.
 
 ## Create A Runpod Pod
 
