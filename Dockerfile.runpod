@@ -25,15 +25,11 @@ WORKDIR /opt/video-inference-validation
 COPY pyproject.toml README.md ./
 COPY src ./src
 COPY configs ./configs
-COPY patches ./patches
+COPY runtime_patches ./runtime_patches
 COPY scripts ./scripts
 
-RUN git clone --depth 1 https://github.com/vllm-project/vllm-omni.git /opt/vllm-omni \
-    && cd /opt/vllm-omni \
-    && git apply /opt/video-inference-validation/patches/vllm-omni-wan22-latent-capture.patch \
-    && python3 -m pip install --no-cache-dir -e .
-
-RUN python3 -m pip install --no-cache-dir -e /opt/video-inference-validation
+RUN python3 -m pip install --no-cache-dir -e /opt/video-inference-validation \
+    && python3 -m pip install --no-cache-dir git+https://github.com/vllm-project/vllm-omni.git
 
 WORKDIR /workspace
 CMD ["/bin/bash"]

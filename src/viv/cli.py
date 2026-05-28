@@ -223,6 +223,9 @@ def cmd_serve(args: argparse.Namespace) -> int:
     env["VIV_CONFIG_ID"] = args.config_id
     env["VIV_LATENT_ROOT"] = str(artifact_root / args.run_id / "artifacts")
     env.setdefault("VIV_LATENT_DTYPE", str(config.get("latent_dtype", "float16")))
+    runtime_patch_path = str(Path(__file__).resolve().parents[2] / "runtime_patches")
+    pythonpath = env.get("PYTHONPATH")
+    env["PYTHONPATH"] = runtime_patch_path if not pythonpath else runtime_patch_path + os.pathsep + pythonpath
     if config.get("hf_home"):
         env.setdefault("HF_HOME", str(config["hf_home"]))
 

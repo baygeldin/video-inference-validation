@@ -42,7 +42,7 @@ PUSH=1 \
 scripts/runpod/build_image.sh
 ```
 
-The Docker build clones vLLM-Omni from upstream and applies `patches/vllm-omni-wan22-latent-capture.patch`.
+The Docker build installs vLLM-Omni from upstream and enables latent capture through `runtime_patches/sitecustomize.py`. No vLLM-Omni source files are edited in the image.
 
 ## Create A Runpod Pod
 
