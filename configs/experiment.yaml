@@ -21,7 +21,7 @@ generation_configs:
     enabled: true
     expected_gpu: NVIDIA H100 80GB HBM3
     gpu_count: 1
-    server:
+    engine:
       tensor_parallel_size: 1
       boundary_ratio: 0.875
       flow_shift: 5.0
@@ -33,7 +33,7 @@ generation_configs:
     enabled: true
     expected_gpu: NVIDIA A100 80GB PCIe
     gpu_count: 1
-    server:
+    engine:
       tensor_parallel_size: 1
       boundary_ratio: 0.875
       flow_shift: 5.0
@@ -45,7 +45,7 @@ generation_configs:
     enabled: true
     expected_gpu: NVIDIA H100 80GB HBM3
     gpu_count: 4
-    server:
+    engine:
       tensor_parallel_size: 4
       boundary_ratio: 0.875
       flow_shift: 5.0
@@ -57,7 +57,7 @@ generation_configs:
     enabled: true
     expected_gpu: NVIDIA A100 80GB PCIe
     gpu_count: 4
-    server:
+    engine:
       tensor_parallel_size: 4
       boundary_ratio: 0.875
       flow_shift: 5.0
@@ -69,7 +69,7 @@ generation_configs:
     enabled: true
     expected_gpu: NVIDIA H100 80GB HBM3
     gpu_count: 1
-    server:
+    engine:
       tensor_parallel_size: 1
       boundary_ratio: 0.875
       flow_shift: 5.0
@@ -82,7 +82,7 @@ generation_configs:
     enabled: true
     expected_gpu: NVIDIA H100 80GB HBM3
     gpu_count: 1
-    server:
+    engine:
       tensor_parallel_size: 1
       boundary_ratio: 0.875
       flow_shift: 5.0
@@ -95,7 +95,7 @@ generation_configs:
     enabled: true
     expected_gpu: NVIDIA H100 80GB HBM3
     gpu_count: 1
-    server:
+    engine:
       tensor_parallel_size: 1
       boundary_ratio: 0.875
       flow_shift: 5.0
@@ -110,7 +110,7 @@ generation_configs:
     enabled: true
     expected_gpu: NVIDIA H100 80GB HBM3
     gpu_count: 1
-    server:
+    engine:
       tensor_parallel_size: 1
       boundary_ratio: 0.875
       flow_shift: 5.0
@@ -124,7 +124,7 @@ generation_configs:
     expected_gpu: NVIDIA H100 80GB HBM3
     gpu_count: 1
     seed_offset: 1000000
-    server:
+    engine:
       tensor_parallel_size: 1
       boundary_ratio: 0.875
       flow_shift: 5.0
@@ -137,7 +137,7 @@ generation_configs:
     expected_gpu: NVIDIA H100 80GB HBM3
     gpu_count: 1
     note: Disabled until vLLM-Omni Wan2.2 FP8 support is validated.
-    server:
+    engine:
       tensor_parallel_size: 1
       boundary_ratio: 0.875
       flow_shift: 5.0

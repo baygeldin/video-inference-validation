@@ -3,7 +3,7 @@
 Dataset-generation harness for the Gonka video inference validation experiment:
 https://github.com/gonka-ai/gonka/discussions/1155#discussioncomment-16976435
 
-The harness is intentionally pragmatic. It builds deterministic job manifests, runs Wan2.2 text-to-video generations through vLLM-Omni, captures final videos plus selected latent checkpoints, and stores artifacts under a Runpod network volume mounted at `/workspace`.
+The harness is intentionally pragmatic. It builds deterministic job manifests, runs Wan2.2 text-to-video generations through vLLM-Omni offline inference, captures final videos plus selected latent checkpoints, and stores artifacts under a Runpod network volume mounted at `/workspace`.
 
 ## Local Checks
 
@@ -42,7 +42,7 @@ PUSH=1 \
 scripts/runpod/build_image.sh
 ```
 
-The Docker build uses CUDA 13.0.2, installs `vllm==0.20.0`, clones `vllm-omni` at tag `v0.20.0`, and installs it editable from source. Latent capture is enabled through `runtime_patches/sitecustomize.py`; no vLLM-Omni source files are edited.
+The Docker build uses CUDA 13.0.2, installs `vllm==0.20.0`, clones `vllm-omni` at tag `v0.20.0`, and installs it editable from source. Latent capture is installed from the experiment package at runtime; no vLLM-Omni source files are edited.
 
 ## Create A Runpod Pod
 

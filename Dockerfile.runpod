@@ -27,7 +27,6 @@ WORKDIR /opt/video-inference-validation
 COPY pyproject.toml README.md ./
 COPY src ./src
 COPY configs ./configs
-COPY runtime_patches ./runtime_patches
 COPY scripts ./scripts
 
 RUN uv pip install -e /opt/video-inference-validation \

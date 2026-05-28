@@ -12,11 +12,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-import requests
-
 from viv.config import (
     enabled_generation_configs,
-    get_generation_config,
     load_prompts,
     load_yaml,
     merged_request,
@@ -41,15 +38,13 @@ def main(argv: list[str] | None = None) -> int:
     compile_p.add_argument("--check", action="store_true")
     compile_p.set_defaults(func=cmd_compile_plan)
 
-    generate_p = sub.add_parser("generate", help="Run jobs against a vLLM-Omni video server")
+    generate_p = sub.add_parser("generate", help="Run jobs with vLLM-Omni offline inference")
     generate_p.add_argument("--jobs", required=True)
-    generate_p.add_argument("--server-url", default="http://127.0.0.1:8091")
     generate_p.add_argument("--config-id")
     generate_p.add_argument("--shard-index", type=int, default=0)
     generate_p.add_argument("--shard-count", type=int, default=1)
     generate_p.add_argument("--force", action="store_true")
     generate_p.add_argument("--no-require-latents", action="store_true")
-    generate_p.add_argument("--timeout", type=int, default=7200)
     generate_p.set_defaults(func=cmd_generate)
 
     inspect_p = sub.add_parser("inspect-run", help="Inspect a run directory")
@@ -59,14 +54,6 @@ def main(argv: list[str] | None = None) -> int:
     inspect_p.add_argument("--jobs")
     inspect_p.add_argument("--no-require-latents", action="store_true")
     inspect_p.set_defaults(func=cmd_inspect_run)
-
-    serve_p = sub.add_parser("serve", help="Exec vLLM-Omni with env vars for one generation config")
-    serve_p.add_argument("--config", default="configs/experiment.yaml")
-    serve_p.add_argument("--config-id", required=True)
-    serve_p.add_argument("--run-id", required=True)
-    serve_p.add_argument("--artifact-root")
-    serve_p.add_argument("--port", type=int, default=8091)
-    serve_p.set_defaults(func=cmd_serve)
 
     args = parser.parse_args(argv)
     try:
@@ -106,6 +93,9 @@ def cmd_compile_plan(args: argparse.Namespace) -> int:
                     "prompt_id": prompt.prompt_id,
                     "prompt": prompt.prompt,
                     "seed": int(request["seed"]),
+                    "model": str(config.get("model", "Wan-AI/Wan2.2-T2V-A14B-Diffusers")),
+                    "hf_home": config.get("hf_home"),
+                    "latent_dtype": str(config.get("latent_dtype", "float16")),
                     "request": request,
                     "generation_config": generation_config,
                     "artifact_relpath": f"artifacts/{config_id}/{prompt.prompt_id}",
@@ -140,6 +130,7 @@ def cmd_generate(args: argparse.Namespace) -> int:
 
     print(f"selected {len(selected)} jobs from {jobs_path}")
     failures = 0
+    generators: dict[str, OfflineVideoGenerator] = {}
     with log_path.open("a", encoding="utf-8") as log_fh:
         for job in selected:
             artifact_dir = run_dir / job["artifact_relpath"]
@@ -148,7 +139,11 @@ def cmd_generate(args: argparse.Namespace) -> int:
                 print(f"skip complete {job['config_id']}/{job['prompt_id']}")
                 continue
             try:
-                run_job(job, run_dir, args.server_url, args.timeout, require_latents=not args.no_require_latents)
+                generator = generators.get(job["config_id"])
+                if generator is None:
+                    generator = OfflineVideoGenerator(job, run_dir)
+                    generators[job["config_id"]] = generator
+                run_job(job, run_dir, generator, require_latents=not args.no_require_latents)
                 write_log(log_fh, job, "completed", {})
                 print(f"completed {job['config_id']}/{job['prompt_id']}")
             except Exception as exc:
@@ -183,41 +178,6 @@ def cmd_inspect_run(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_serve(args: argparse.Namespace) -> int:
-    config = load_yaml(Path(args.config))
-    generation_config = get_generation_config(config, args.config_id)
-    artifact_root = Path(args.artifact_root or config.get("artifact_root") or "/workspace/runs")
-    server = generation_config.get("server") or {}
-    env = os.environ.copy()
-    env["VIV_CAPTURE_LATENTS"] = "1"
-    env["VIV_CONFIG_ID"] = args.config_id
-    env["VIV_LATENT_ROOT"] = str(artifact_root / args.run_id / "artifacts")
-    env.setdefault("VIV_LATENT_DTYPE", str(config.get("latent_dtype", "float16")))
-    runtime_patch_path = str(Path(__file__).resolve().parents[2] / "runtime_patches")
-    pythonpath = env.get("PYTHONPATH")
-    env["PYTHONPATH"] = runtime_patch_path if not pythonpath else runtime_patch_path + os.pathsep + pythonpath
-    if config.get("hf_home"):
-        env.setdefault("HF_HOME", str(config["hf_home"]))
-
-    model = str(config.get("model", "Wan-AI/Wan2.2-T2V-A14B-Diffusers"))
-    command = ["vllm", "serve", model, "--omni", "--port", str(args.port)]
-    if server.get("tensor_parallel_size"):
-        command += ["--tensor-parallel-size", str(server["tensor_parallel_size"])]
-    if server.get("boundary_ratio") is not None:
-        command += ["--boundary-ratio", str(server["boundary_ratio"])]
-    if server.get("flow_shift") is not None:
-        command += ["--flow-shift", str(server["flow_shift"])]
-    cache_backend = server.get("cache_backend")
-    if cache_backend and cache_backend != "none":
-        command += ["--cache-backend", str(cache_backend)]
-    if server.get("enable_cache_dit_summary"):
-        command.append("--enable-cache-dit-summary")
-
-    print("exec:", " ".join(command), flush=True)
-    os.execvpe(command[0], command, env)
-    return 0
-
-
 def load_jobs(path: Path) -> list[dict[str, Any]]:
     jobs = []
     with path.open("r", encoding="utf-8") as fh:
@@ -249,26 +209,104 @@ def select_jobs(
     return selected
 
 
-def run_job(job: dict[str, Any], run_dir: Path, server_url: str, timeout: int, require_latents: bool) -> None:
+class OfflineVideoGenerator:
+    def __init__(self, first_job: dict[str, Any], run_dir: Path) -> None:
+        generation_config = first_job["generation_config"]
+        engine = generation_config.get("engine") or {}
+        request = first_job["request"]
+        model = str(first_job.get("model") or "Wan-AI/Wan2.2-T2V-A14B-Diffusers")
+
+        os.environ["VIV_CAPTURE_LATENTS"] = "1"
+        os.environ["VIV_CONFIG_ID"] = first_job["config_id"]
+        os.environ["VIV_LATENT_ROOT"] = str(run_dir / "artifacts")
+        os.environ.setdefault("VIV_LATENT_DTYPE", str(first_job.get("latent_dtype") or "float16"))
+        if first_job.get("hf_home"):
+            os.environ.setdefault("HF_HOME", str(first_job["hf_home"]))
+
+        from viv.vllm_omni_monkey_patch import install as install_viv_patch
+
+        install_viv_patch()
+
+        from vllm_omni.diffusion.data import DiffusionParallelConfig
+        from vllm_omni.entrypoints.omni import Omni
+
+        cache_backend = engine.get("cache_backend")
+        if cache_backend == "none":
+            cache_backend = None
+
+        parallel_config = DiffusionParallelConfig(
+            tensor_parallel_size=int(engine.get("tensor_parallel_size", 1) or 1),
+            cfg_parallel_size=int(engine.get("cfg_parallel_size", 1) or 1),
+            ulysses_degree=int(engine.get("ulysses_degree", 1) or 1),
+            ring_degree=int(engine.get("ring_degree", 1) or 1),
+            vae_patch_parallel_size=int(engine.get("vae_patch_parallel_size", 1) or 1),
+            enable_expert_parallel=bool(engine.get("enable_expert_parallel", False)),
+        )
+        omni_kwargs: dict[str, Any] = {
+            "model": model,
+            "parallel_config": parallel_config,
+            "cache_backend": cache_backend,
+            "cache_config": _cache_dit_config() if cache_backend == "cache_dit" else None,
+            "enable_cache_dit_summary": bool(engine.get("enable_cache_dit_summary", False)),
+        }
+        if engine.get("boundary_ratio") is not None:
+            omni_kwargs["boundary_ratio"] = float(engine["boundary_ratio"])
+        elif request.get("boundary_ratio") is not None:
+            omni_kwargs["boundary_ratio"] = float(request["boundary_ratio"])
+        if engine.get("flow_shift") is not None:
+            omni_kwargs["flow_shift"] = float(engine["flow_shift"])
+        elif request.get("flow_shift") is not None:
+            omni_kwargs["flow_shift"] = float(request["flow_shift"])
+        if engine.get("quantization") is not None:
+            omni_kwargs["quantization"] = engine["quantization"]
+
+        self.model = model
+        self.engine = engine
+        self.omni = Omni(**omni_kwargs)
+
+    def generate(self, job: dict[str, Any], video_path: Path) -> None:
+        import torch
+        from diffusers.utils import export_to_video
+        from vllm_omni.inputs.data import OmniDiffusionSamplingParams
+        from vllm_omni.platforms import current_omni_platform
+
+        request = job["request"]
+        os.environ["VIV_CONFIG_ID"] = job["config_id"]
+
+        prompt: dict[str, Any] = {"prompt": request["prompt"]}
+        if request.get("negative_prompt"):
+            prompt["negative_prompt"] = request["negative_prompt"]
+
+        generator = torch.Generator(device=current_omni_platform.device_type).manual_seed(int(request["seed"]))
+        sampling_kwargs = {
+            "height": int(request["height"]),
+            "width": int(request["width"]),
+            "generator": generator,
+            "guidance_scale": float(request["guidance_scale"]),
+            "num_inference_steps": int(request["num_inference_steps"]),
+            "num_frames": int(request["num_frames"]),
+        }
+        if request.get("guidance_scale_2") is not None:
+            sampling_kwargs["guidance_scale_2"] = float(request["guidance_scale_2"])
+
+        output = self.omni.generate(prompt, OmniDiffusionSamplingParams(**sampling_kwargs))
+        frames = extract_video_frames(output)
+        video_tmp = video_path.with_suffix(video_path.suffix + ".tmp")
+        export_to_video(frames, str(video_tmp), fps=int(request.get("fps", 16)))
+        video_tmp.replace(video_path)
+
+
+def run_job(job: dict[str, Any], run_dir: Path, generator: OfflineVideoGenerator, require_latents: bool) -> None:
     artifact_dir = run_dir / job["artifact_relpath"]
     latents_dir = artifact_dir / "latents"
     artifact_dir.mkdir(parents=True, exist_ok=True)
     latents_dir.mkdir(parents=True, exist_ok=True)
 
-    payload = stringify_request(job["request"])
     started = time.time()
-    response = requests.post(
-        server_url.rstrip("/") + "/v1/videos/sync",
-        files=[(key, (None, value)) for key, value in payload.items()],
-        timeout=timeout,
-    )
-    response.raise_for_status()
+    video_path = artifact_dir / "video.mp4"
+    generator.generate(job, video_path)
     elapsed = time.time() - started
 
-    video_tmp = artifact_dir / "video.mp4.tmp"
-    video_path = artifact_dir / "video.mp4"
-    video_tmp.write_bytes(response.content)
-    video_tmp.replace(video_path)
     move_spooled_latents(run_dir, job, latents_dir)
     if require_latents:
         missing = [name for name in LATENT_NAMES if not (latents_dir / f"{name}.safetensors").exists()]
@@ -281,24 +319,11 @@ def run_job(job: dict[str, Any], run_dir: Path, server_url: str, timeout: int, r
         "completed_at": datetime.now(timezone.utc).isoformat(),
         "elapsed_seconds": elapsed,
         "job": job,
-        "server_url": server_url,
-        "response_headers": dict(response.headers),
+        "inference_mode": "offline",
         "runtime": runtime_fingerprint(),
         "checksums": checksums,
     }
     write_json(artifact_dir / "metadata.json", metadata)
-
-
-def stringify_request(request: dict[str, Any]) -> dict[str, str]:
-    payload = {}
-    for key, value in request.items():
-        if value is None:
-            continue
-        if isinstance(value, bool):
-            payload[key] = "true" if value else "false"
-        else:
-            payload[key] = str(value)
-    return payload
 
 
 def move_spooled_latents(run_dir: Path, job: dict[str, Any], final_latents_dir: Path) -> None:
@@ -333,6 +358,65 @@ def write_checksums(artifact_dir: Path) -> dict[str, str]:
         checksums[rel] = sha256_file(path)
     write_json(artifact_dir / "checksums.json", checksums)
     return checksums
+
+
+def extract_video_frames(output: Any) -> Any:
+    import numpy as np
+    import torch
+    from vllm_omni.outputs import OmniRequestOutput
+
+    frames = output[0] if isinstance(output, list) and output else output
+    if isinstance(frames, OmniRequestOutput):
+        if frames.is_pipeline_output and frames.request_output is not None:
+            frames = frames.request_output
+        if isinstance(frames, OmniRequestOutput):
+            if not frames.images:
+                raise ValueError("No video frames found in OmniRequestOutput")
+            frames = frames.images[0]
+    if isinstance(frames, tuple) and len(frames) == 2:
+        frames = frames[0]
+    if isinstance(frames, dict):
+        frames = frames.get("frames") or frames.get("video")
+    if isinstance(frames, list) and len(frames) == 1:
+        first = frames[0]
+        if isinstance(first, tuple) and len(first) == 2:
+            frames = first[0]
+        elif isinstance(first, dict):
+            frames = first.get("frames") or first.get("video")
+        elif isinstance(first, list):
+            frames = first
+    if frames is None:
+        raise ValueError("No video frames found in output")
+    if isinstance(frames, torch.Tensor):
+        video = frames.detach().cpu()
+        if video.dim() == 5:
+            video = video[0]
+        if video.dim() == 4 and video.shape[0] in (3, 4):
+            video = video.permute(1, 2, 3, 0)
+        if video.is_floating_point():
+            video = video.clamp(-1, 1) * 0.5 + 0.5
+        return list(video.float().numpy())
+    if isinstance(frames, np.ndarray):
+        video_array = frames[0] if frames.ndim == 5 else frames
+        if np.issubdtype(video_array.dtype, np.integer):
+            video_array = video_array.astype(np.float32) / 255.0
+        return list(video_array)
+    return frames
+
+
+def _cache_dit_config() -> dict[str, Any]:
+    return {
+        "Fn_compute_blocks": 1,
+        "Bn_compute_blocks": 0,
+        "max_warmup_steps": 4,
+        "max_cached_steps": 20,
+        "residual_diff_threshold": 0.24,
+        "max_continuous_cached_steps": 3,
+        "enable_taylorseer": False,
+        "taylorseer_order": 1,
+        "scm_steps_mask_policy": None,
+        "scm_steps_policy": "dynamic",
+    }
 
 
 def sha256_file(path: Path) -> str:
