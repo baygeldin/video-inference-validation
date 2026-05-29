@@ -15,7 +15,6 @@ FPS = 16
 NUM_INFERENCE_STEPS = 40
 GUIDANCE_SCALE = 4.0
 GUIDANCE_SCALE_2 = 4.0
-NEGATIVE_PROMPT = "low quality, blurry, static, distorted, artifacts"
 
 
 @dataclass(frozen=True)
@@ -30,8 +29,8 @@ def main(argv: list[str] | None = None) -> int:
         prog="viv",
         description="Generate Wan2.2 videos from a JSONL prompt file with vLLM-Omni.",
     )
-    parser.add_argument("prompts", type=Path, help="JSONL file with id/seed/prompt rows")
-    parser.add_argument("output_dir", type=Path, help="Directory for generated <id>.mp4 files")
+    parser.add_argument("prompts", type=Path, help="Path to JSONL file with prompts")
+    parser.add_argument("output_dir", type=Path, help="Output folder path")
     args = parser.parse_args(argv)
 
     try:
@@ -103,8 +102,6 @@ class OfflineVideoGenerator:
         from vllm_omni.platforms import current_omni_platform
 
         request: dict[str, object] = {"prompt": prompt.prompt}
-        if NEGATIVE_PROMPT:
-            request["negative_prompt"] = NEGATIVE_PROMPT
 
         torch_generator = torch.Generator(
             device=current_omni_platform.device_type
@@ -119,57 +116,17 @@ class OfflineVideoGenerator:
             num_frames=NUM_FRAMES,
         )
 
-        frames = self.omni.generate(request, sampling_params)
+        output = self.omni.generate(request, sampling_params)
         tmp_path = video_path.with_suffix(".tmp.mp4")
-        export_to_video(video_frames(frames), str(tmp_path), fps=FPS)
+        export_to_video(wan_video_frames(output), str(tmp_path), fps=FPS)
         tmp_path.replace(video_path)
 
 
-def video_frames(output: object) -> object:
-    import numpy as np
-    import torch
+def wan_video_frames(output: object) -> list[object]:
     from vllm_omni.outputs import OmniRequestOutput
 
-    frames = output[0] if isinstance(output, list) and output else output
-    if isinstance(frames, OmniRequestOutput):
-        if frames.final_output_type != "image":
-            raise ValueError(
-                f"Unexpected output type '{frames.final_output_type}', expected 'image'"
-            )
-        if frames.is_pipeline_output and frames.request_output is not None:
-            frames = frames.request_output
-        if isinstance(frames, OmniRequestOutput):
-            if not frames.images:
-                raise ValueError("No video frames found in OmniRequestOutput")
-            frames = frames.images
-
-    if isinstance(frames, list) and len(frames) == 1:
-        frames = frames[0]
-    if isinstance(frames, tuple):
-        frames = frames[0]
-    elif isinstance(frames, dict):
-        frames = frames.get("frames") or frames.get("video")
-
-    if frames is None:
-        raise ValueError("No video frames found in output")
-
-    if isinstance(frames, torch.Tensor):
-        video = frames.detach().cpu()
-        if video.dim() == 5:
-            video = video[0]
-        if video.dim() == 4 and video.shape[0] in {3, 4}:
-            video = video.permute(1, 2, 3, 0)
-        if video.is_floating_point():
-            video = video.clamp(-1, 1) * 0.5 + 0.5
-        return list(video.float().numpy())
-
-    if isinstance(frames, np.ndarray):
-        video_array = frames[0] if frames.ndim == 5 else frames
-        if np.issubdtype(video_array.dtype, np.integer):
-            video_array = video_array.astype(np.float32) / 255.0
-        return list(video_array)
-
-    return frames
+    result = OmniRequestOutput.unwrap_result(output)
+    return list(result.images[0])
 
 
 if __name__ == "__main__":
