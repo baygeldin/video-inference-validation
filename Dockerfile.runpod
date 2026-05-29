@@ -22,10 +22,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN python3 -m pip install --break-system-packages --no-cache-dir --upgrade pip uv
 
 WORKDIR /opt/video-inference-validation
-COPY pyproject.toml README.md ./
+
+COPY pyproject.toml ./
 COPY src ./src
-COPY configs ./configs
-COPY scripts ./scripts
+COPY prompts ./prompts
 
 RUN uv pip install -e /opt/video-inference-validation \
     && uv pip install vllm==0.20.0 --torch-backend=auto \

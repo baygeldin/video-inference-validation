@@ -14,7 +14,7 @@ Use JSONL with one prompt per line:
 ## Run
 
 ```bash
-viv configs/prompts.pilot.jsonl /workspace/outputs
+viv prompts/pilot.jsonl /workspace/outputs
 ```
 
 The script runs offline inference through vLLM-Omni and writes:
@@ -36,5 +36,5 @@ Inside the pod:
 
 ```bash
 cd /opt/video-inference-validation
-viv configs/prompts.pilot.jsonl /workspace/outputs
+viv prompts/pilot.jsonl /workspace/outputs
 ```
