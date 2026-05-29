@@ -8,6 +8,10 @@
 # Miscellaneous
 tmp/
 
+# Devcontainer
+.devcontainer/.env
+
+
 ### Default Python gitignore template:
 
 # Byte-compiled / optimized / DLL files

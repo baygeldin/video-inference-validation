@@ -26,6 +26,9 @@ RUN apt-get update \
       flex \
  && rm -rf /var/lib/apt/lists/*
 
+RUN curl -fsSL cli.runpod.io | bash \
+ && runpodctl version
+
 COPY .bashrc /root/.bashrc
 
 ENTRYPOINT ["/usr/bin/dumb-init", "--"]
