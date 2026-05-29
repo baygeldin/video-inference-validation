@@ -27,9 +27,11 @@ The current hardcoded generation defaults are Wan2.2 T2V at `832x480`, `81` fram
 
 ## RunPod Image
 
+Build and push the image from your host machine, where Docker is available:
+
 ```bash
 IMAGE_NAME=ghcr.io/YOUR_ORG/video-inference-validation:latest \
-make push-image
+./build-image.sh
 ```
 
 Inside the pod:
