@@ -29,8 +29,7 @@ The current hardcoded generation defaults are Wan2.2 T2V at `832x480`, `81` fram
 
 ```bash
 IMAGE_NAME=ghcr.io/YOUR_ORG/video-inference-validation:latest \
-PUSH=1 \
-scripts/runpod/build_image.sh
+make push-image
 ```
 
 Inside the pod:
