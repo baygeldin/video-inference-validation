@@ -19,19 +19,23 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-venv \
     && rm -rf /var/lib/apt/lists/*
 
-RUN python3 -m pip install --break-system-packages --no-cache-dir --upgrade pip uv
+RUN python3 -m pip install --break-system-packages --no-cache-dir uv
 
 WORKDIR /opt/video-inference-validation
+
+ARG VLLM_VERSION=0.20.0
+ARG VLLM_OMNI_REF=v0.20.0
+
+RUN uv pip install vllm==${VLLM_VERSION} --torch-backend=auto \
+    && git clone --branch ${VLLM_OMNI_REF} --depth 1 https://github.com/vllm-project/vllm-omni.git /opt/vllm-omni \
+    && cd /opt/vllm-omni \
+    && uv pip install -e .
 
 COPY pyproject.toml ./
 COPY src ./src
 COPY prompts ./prompts
 
-RUN uv pip install -e /opt/video-inference-validation \
-    && uv pip install vllm==0.20.0 --torch-backend=auto \
-    && git clone --branch v0.20.0 --depth 1 https://github.com/vllm-project/vllm-omni.git /opt/vllm-omni \
-    && cd /opt/vllm-omni \
-    && uv pip install -e .
+RUN uv pip install -e /opt/video-inference-validation
 
 WORKDIR /workspace
 CMD ["/bin/bash"]
