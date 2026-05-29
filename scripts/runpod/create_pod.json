@@ -12,7 +12,6 @@
   "ports": ["22/tcp", "8888/http"],
   "env": {
     "HF_HOME": "/workspace/hf-cache",
-    "VIV_ARTIFACT_ROOT": "/workspace/runs",
     "HF_TOKEN": "REPLACE_OR_REMOVE"
   }
 }

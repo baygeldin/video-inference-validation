@@ -2,10 +2,7 @@
 name = "video-inference-validation"
 version = "0.1.0"
 requires-python = ">=3.10"
-dependencies = [
-    "pyyaml>=6.0.2",
-    "safetensors>=0.4.5",
-]
+dependencies = []
 
 [project.scripts]
 viv = "viv.cli:main"
