@@ -26,16 +26,14 @@ The script runs offline inference through vLLM-Omni and writes:
 The current hardcoded generation defaults are Wan2.2 T2V at `832x480`, `81` frames, `40` steps, `16` fps, and CFG guidance `4.0`.
 
 ## RunPod Image
-
-Build and push the image from your host machine, where Docker is available:
-
+Build and push the image to Docker Hub from your host machine:
 ```bash
-IMAGE_NAME=ghcr.io/YOUR_ORG/video-inference-validation:latest \
 ./build-image.sh
 ```
 
-Inside the pod:
+It will use the version from `pyproject.toml` to tag the image.
 
+Then, inside the pod:
 ```bash
 cd /opt/video-inference-validation
 viv prompts/pilot.jsonl /workspace/outputs
