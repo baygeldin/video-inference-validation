@@ -26,7 +26,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxext6 \
     libxrender1 \
     ninja-build \
+    openssh-server \
     pkg-config \
+    vim \
     zstd \
     && rm -rf /var/lib/apt/lists/*
 
@@ -62,9 +64,12 @@ RUN uv pip install "vllm==${VLLM_VERSION}" hf_transfer --torch-backend=cu130 \
 COPY pyproject.toml /opt/video-inference-validation/
 COPY src /opt/video-inference-validation/src
 COPY prompts /opt/video-inference-validation/prompts
+COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 
 RUN uv pip install -e /opt/video-inference-validation
+RUN chmod +x /usr/local/bin/entrypoint.sh
 
 WORKDIR /workspace
 
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 CMD ["sleep", "infinity"]
