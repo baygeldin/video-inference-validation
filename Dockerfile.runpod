@@ -53,14 +53,17 @@ RUN git lfs install --system \
     && ln -sf "${VIRTUAL_ENV}/bin/python" /usr/local/bin/python \
     && ln -sf "${VIRTUAL_ENV}/bin/python" /usr/local/bin/python3
 
-COPY pyproject.toml uv.lock .python-version configs.yml /opt/video-inference-validation/
-RUN uv sync --project /opt/video-inference-validation --locked --no-dev --no-install-project
+COPY pyproject.toml uv.lock .python-version /opt/video-inference-validation/
+RUN --mount=type=cache,target=/workspace/.cache/uv \
+    uv sync --project /opt/video-inference-validation --locked --no-dev --no-install-project
 
+COPY configs.yml /opt/video-inference-validation/
 COPY src /opt/video-inference-validation/src
 COPY prompts /opt/video-inference-validation/prompts
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 
-RUN uv sync --project /opt/video-inference-validation --locked --no-dev \
+RUN --mount=type=cache,target=/workspace/.cache/uv \
+    uv sync --project /opt/video-inference-validation --locked --no-dev \
     && chmod +x /usr/local/bin/entrypoint.sh
 
 WORKDIR /workspace
