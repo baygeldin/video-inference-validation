@@ -17,13 +17,20 @@ Use JSONL with one prompt per line:
 viv -p pilot /workspace/outputs
 ```
 
+Use `--config`/`-c` to select an inference config from `configs.yml`:
+
+```bash
+viv -p pilot -c cfg_disabled /workspace/outputs
+viv -p pilot --config random_seed /workspace/outputs
+```
+
 The script runs offline inference through vLLM-Omni and writes:
 
 ```text
 /workspace/outputs/<id>.mp4
 ```
 
-The current hardcoded generation defaults are Wan2.2 T2V at `832x480`, `81` frames, `40` steps, `16` fps, and CFG guidance `4.0`.
+The default generation config is Wan2.2 T2V at `832x480`, `81` frames, `40` steps, `16` fps, and CFG guidance `4.0`.
 
 ## RunPod Image
 Build and push the image to Docker Hub from your host machine:

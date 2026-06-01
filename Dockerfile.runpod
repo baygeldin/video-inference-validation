@@ -53,7 +53,7 @@ RUN git lfs install --system \
     && ln -sf "${VIRTUAL_ENV}/bin/python" /usr/local/bin/python \
     && ln -sf "${VIRTUAL_ENV}/bin/python" /usr/local/bin/python3
 
-COPY pyproject.toml uv.lock .python-version /opt/video-inference-validation/
+COPY pyproject.toml uv.lock .python-version configs.yml /opt/video-inference-validation/
 RUN uv sync --project /opt/video-inference-validation --locked --no-dev --no-install-project
 
 COPY src /opt/video-inference-validation/src

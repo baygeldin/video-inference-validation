@@ -2,21 +2,16 @@ from __future__ import annotations
 
 import argparse
 import json
+import secrets
 import sys
 from dataclasses import dataclass
 from pathlib import Path
 
 
 MODEL = "Wan-AI/Wan2.2-T2V-A14B-Diffusers"
-WIDTH = 832
-HEIGHT = 480
-NUM_FRAMES = 81
-FPS = 16
-NUM_INFERENCE_STEPS = 40
-GUIDANCE_SCALE = 4.0
-GUIDANCE_SCALE_2 = 4.0
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 PROMPTS_DIR = PROJECT_ROOT / "prompts"
+CONFIGS_PATH = PROJECT_ROOT / "configs.yml"
 
 
 @dataclass(frozen=True)
@@ -24,6 +19,18 @@ class Prompt:
     id: str
     prompt: str
     seed: int
+
+
+@dataclass(frozen=True)
+class InferenceConfig:
+    width: int
+    height: int
+    num_frames: int
+    fps: int
+    num_inference_steps: int
+    guidance_scale: float
+    guidance_scale_2: float
+    random_seed: bool = False
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -38,23 +45,30 @@ def main(argv: list[str] | None = None) -> int:
         required=True,
         help="Prompt collection identified, or path to the JSONL file",
     )
+    parser.add_argument(
+        "-c",
+        "--config",
+        default="default",
+        help="Inference config name from configs.yml",
+    )
     parser.add_argument("output_dir", type=Path, help="Output folder path")
     args = parser.parse_args(argv)
 
     try:
         prompts_path = resolve_prompts_path(args.prompts_arg)
-        run(prompts_path, args.output_dir)
+        config = load_inference_config(args.config)
+        run(prompts_path, args.output_dir, config)
     except Exception as exc:
         print(f"viv: error: {exc}", file=sys.stderr)
         return 2
     return 0
 
 
-def run(prompts_path: Path, output_dir: Path) -> None:
+def run(prompts_path: Path, output_dir: Path, config: InferenceConfig) -> None:
     prompts = load_prompts(prompts_path)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    generator = OfflineVideoGenerator()
+    generator = OfflineVideoGenerator(config)
     for prompt in prompts:
         video_path = output_dir / f"{prompt.id}.mp4"
         print(f"generating {prompt.id} -> {video_path}", flush=True)
@@ -111,11 +125,83 @@ def resolve_prompts_path(prompts_arg: str) -> Path:
     return (Path.cwd() / path).resolve()
 
 
+def load_inference_config(config_name: str) -> InferenceConfig:
+    import yaml
+
+    name = config_name.strip()
+    if not name:
+        raise ValueError("you must provide config name")
+
+    with CONFIGS_PATH.open("r", encoding="utf-8") as fh:
+        raw = yaml.safe_load(fh)
+
+    if not isinstance(raw, dict):
+        raise ValueError(f"{CONFIGS_PATH}: config file must contain a mapping")
+    if name not in raw:
+        available = ", ".join(sorted(str(key) for key in raw))
+        raise ValueError(f"unknown config '{name}' (available: {available})")
+
+    values = raw[name]
+    if not isinstance(values, dict):
+        raise ValueError(f"{CONFIGS_PATH}: config '{name}' must be a mapping")
+
+    required = {
+        "width",
+        "height",
+        "num_frames",
+        "fps",
+        "num_inference_steps",
+        "guidance_scale",
+        "guidance_scale_2",
+    }
+    missing = sorted(required - values.keys())
+    if missing:
+        joined = ", ".join(missing)
+        raise ValueError(f"{CONFIGS_PATH}: config '{name}' missing {joined}")
+
+    return InferenceConfig(
+        width=_positive_int(values["width"], name, "width"),
+        height=_positive_int(values["height"], name, "height"),
+        num_frames=_positive_int(values["num_frames"], name, "num_frames"),
+        fps=_positive_int(values["fps"], name, "fps"),
+        num_inference_steps=_positive_int(
+            values["num_inference_steps"], name, "num_inference_steps"
+        ),
+        guidance_scale=_float(values["guidance_scale"], name, "guidance_scale"),
+        guidance_scale_2=_float(values["guidance_scale_2"], name, "guidance_scale_2"),
+        random_seed=_bool(values.get("random_seed", False), name, "random_seed"),
+    )
+
+
+def _positive_int(value: object, config_name: str, field: str) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"config '{config_name}' field '{field}' must be an int") from exc
+    if parsed <= 0:
+        raise ValueError(f"config '{config_name}' field '{field}' must be positive")
+    return parsed
+
+
+def _float(value: object, config_name: str, field: str) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"config '{config_name}' field '{field}' must be a number") from exc
+
+
+def _bool(value: object, config_name: str, field: str) -> bool:
+    if isinstance(value, bool):
+        return value
+    raise ValueError(f"config '{config_name}' field '{field}' must be a boolean")
+
+
 class OfflineVideoGenerator:
-    def __init__(self) -> None:
+    def __init__(self, config: InferenceConfig) -> None:
         from vllm_omni.diffusion.data import DiffusionParallelConfig
         from vllm_omni.entrypoints.omni import Omni
 
+        self.config = config
         parallel_config = DiffusionParallelConfig(tensor_parallel_size=1)
         self.omni = Omni(model=MODEL, parallel_config=parallel_config)
 
@@ -126,23 +212,26 @@ class OfflineVideoGenerator:
         from vllm_omni.platforms import current_omni_platform
 
         request: dict[str, object] = {"prompt": prompt.prompt}
+        seed = secrets.randbits(63) if self.config.random_seed else prompt.seed
+        if self.config.random_seed:
+            print(f"using random seed {seed} for {prompt.id}", flush=True)
 
         torch_generator = torch.Generator(
             device=current_omni_platform.device_type
-        ).manual_seed(prompt.seed)
+        ).manual_seed(seed)
         sampling_params = OmniDiffusionSamplingParams(
-            height=HEIGHT,
-            width=WIDTH,
+            height=self.config.height,
+            width=self.config.width,
             generator=torch_generator,
-            guidance_scale=GUIDANCE_SCALE,
-            guidance_scale_2=GUIDANCE_SCALE_2,
-            num_inference_steps=NUM_INFERENCE_STEPS,
-            num_frames=NUM_FRAMES,
+            guidance_scale=self.config.guidance_scale,
+            guidance_scale_2=self.config.guidance_scale_2,
+            num_inference_steps=self.config.num_inference_steps,
+            num_frames=self.config.num_frames,
         )
 
         output = self.omni.generate(request, sampling_params)
         tmp_path = video_path.with_suffix(".tmp.mp4")
-        export_to_video(wan_video_frames(output), str(tmp_path), fps=FPS)
+        export_to_video(wan_video_frames(output), str(tmp_path), fps=self.config.fps)
         tmp_path.replace(video_path)
 
 
