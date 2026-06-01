@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import secrets
 import sys
 from dataclasses import dataclass
@@ -30,6 +31,9 @@ class InferenceConfig:
     num_inference_steps: int
     guidance_scale: float
     guidance_scale_2: float
+    model_revision: str
+    attention_backend: str
+    export_quality: float
     random_seed: bool = False
 
 
@@ -68,6 +72,13 @@ def run(prompts_path: Path, output_dir: Path, config: InferenceConfig) -> None:
     prompts = load_prompts(prompts_path)
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    print(
+        "using "
+        f"{MODEL}@{config.model_revision}, "
+        f"attention={config.attention_backend}, "
+        f"export_quality={config.export_quality}",
+        flush=True,
+    )
     generator = OfflineVideoGenerator(config)
     for prompt in prompts:
         video_path = output_dir / f"{prompt.id}.mp4"
@@ -153,6 +164,9 @@ def load_inference_config(config_name: str) -> InferenceConfig:
         "num_inference_steps",
         "guidance_scale",
         "guidance_scale_2",
+        "model_revision",
+        "attention_backend",
+        "export_quality",
     }
     missing = sorted(required - values.keys())
     if missing:
@@ -169,6 +183,11 @@ def load_inference_config(config_name: str) -> InferenceConfig:
         ),
         guidance_scale=_float(values["guidance_scale"], name, "guidance_scale"),
         guidance_scale_2=_float(values["guidance_scale_2"], name, "guidance_scale_2"),
+        model_revision=_non_empty_str(values["model_revision"], name, "model_revision"),
+        attention_backend=_attention_backend(
+            values["attention_backend"], name, "attention_backend"
+        ),
+        export_quality=_quality(values["export_quality"], name, "export_quality"),
         random_seed=_bool(values.get("random_seed", False), name, "random_seed"),
     )
 
@@ -190,20 +209,67 @@ def _float(value: object, config_name: str, field: str) -> float:
         raise ValueError(f"config '{config_name}' field '{field}' must be a number") from exc
 
 
+def _quality(value: object, config_name: str, field: str) -> float:
+    parsed = _float(value, config_name, field)
+    if parsed < 0 or parsed > 10:
+        raise ValueError(
+            f"config '{config_name}' field '{field}' must be between 0 and 10"
+        )
+    return parsed
+
+
 def _bool(value: object, config_name: str, field: str) -> bool:
     if isinstance(value, bool):
         return value
     raise ValueError(f"config '{config_name}' field '{field}' must be a boolean")
 
 
+def _non_empty_str(value: object, config_name: str, field: str) -> str:
+    parsed = str(value or "").strip()
+    if not parsed:
+        raise ValueError(
+            f"config '{config_name}' field '{field}' must be a non-empty string"
+        )
+    return parsed
+
+
+def _attention_backend(value: object, config_name: str, field: str) -> str:
+    parsed = _non_empty_str(value, config_name, field).upper()
+    allowed = {"FLASH_ATTN", "TORCH_SDPA", "SAGE_ATTN"}
+    if parsed not in allowed:
+        joined = ", ".join(sorted(allowed))
+        raise ValueError(
+            f"config '{config_name}' field '{field}' must be one of: {joined}"
+        )
+    return parsed
+
+
+def resolve_model_path(model: str, revision: str) -> str:
+    path = Path(model).expanduser()
+    if path.exists():
+        return str(path)
+
+    from huggingface_hub import snapshot_download
+
+    return snapshot_download(repo_id=model, revision=revision, allow_patterns=["*"])
+
+
 class OfflineVideoGenerator:
     def __init__(self, config: InferenceConfig) -> None:
+        self.config = config
+        os.environ["DIFFUSION_ATTENTION_BACKEND"] = config.attention_backend
+        model_path = resolve_model_path(MODEL, config.model_revision)
+
         from vllm_omni.diffusion.data import DiffusionParallelConfig
         from vllm_omni.entrypoints.omni import Omni
 
-        self.config = config
         parallel_config = DiffusionParallelConfig(tensor_parallel_size=1)
-        self.omni = Omni(model=MODEL, parallel_config=parallel_config)
+        self.omni = Omni(
+            model=model_path,
+            revision=config.model_revision,
+            attention_backend=config.attention_backend,
+            parallel_config=parallel_config,
+        )
 
     def generate(self, prompt: Prompt, video_path: Path) -> None:
         import torch
@@ -231,7 +297,12 @@ class OfflineVideoGenerator:
 
         output = self.omni.generate(request, sampling_params)
         tmp_path = video_path.with_suffix(".tmp.mp4")
-        export_to_video(wan_video_frames(output), str(tmp_path), fps=self.config.fps)
+        export_to_video(
+            wan_video_frames(output),
+            str(tmp_path),
+            fps=self.config.fps,
+            quality=self.config.export_quality,
+        )
         tmp_path.replace(video_path)
 
 

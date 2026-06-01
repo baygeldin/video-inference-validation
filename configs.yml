@@ -6,6 +6,9 @@ default: &default
   num_inference_steps: 40
   guidance_scale: 4.0
   guidance_scale_2: 4.0
+  model_revision: 5be7df9619b54f4e2667b2755bc6a756675b5cd7
+  attention_backend: FLASH_ATTN
+  export_quality: 5.0
   random_seed: false
 
 cfg_disabled:

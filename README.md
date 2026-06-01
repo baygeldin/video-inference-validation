@@ -30,7 +30,7 @@ The script runs offline inference through vLLM-Omni and writes:
 /workspace/outputs/<id>.mp4
 ```
 
-The default generation config is Wan2.2 T2V at `832x480`, `81` frames, `40` steps, `16` fps, and CFG guidance `4.0`.
+The default generation config is Wan2.2 T2V at `832x480`, `81` frames, `40` steps, `16` fps, CFG guidance `4.0`, HuggingFace revision `5be7df9619b54f4e2667b2755bc6a756675b5cd7`, diffusion attention backend `FLASH_ATTN`, and MP4 export quality `5.0`.
 
 ## RunPod Image
 Build and push the image to Docker Hub from your host machine:
