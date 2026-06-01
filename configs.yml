@@ -14,24 +14,25 @@ default: &default
   cache_backend: null
   random_seed: false
 
-tp4:
+tp4_parallelism:
   <<: *default
   tensor_parallelism: 4
+
+int4_quantization:
+  <<: *default
+  model_name: Intel/Wan2.2-T2V-A14B-Diffusers-int4-AutoRound
+  model_revision: 0fe5b7a14c052f1473b5e0306e35c54791bc604d
 
 cfg_disabled:
   <<: *default
   guidance_scale: 1.0
   guidance_scale_2: 1.0
 
-random_seed:
-  <<: *default
-  random_seed: true
-
 cache_dit:
   <<: *default
   cache_backend: cache_dit
 
-int4:
+random_seed:
   <<: *default
-  model_name: Intel/Wan2.2-T2V-A14B-Diffusers-int4-AutoRound
-  model_revision: 0fe5b7a14c052f1473b5e0306e35c54791bc604d
+  random_seed: true
+

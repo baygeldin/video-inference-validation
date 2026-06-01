@@ -22,9 +22,9 @@ Use `--config`/`-c` to select an inference config from `configs.yml`:
 ```bash
 viv -p pilot -c cfg_disabled /workspace/outputs
 viv -p pilot --config random_seed /workspace/outputs
-viv -p pilot --config tp4 /workspace/outputs
+viv -p pilot --config tp4_parallelism /workspace/outputs
 viv -p pilot --config cache_dit /workspace/outputs
-viv -p pilot --config int4 /workspace/outputs
+viv -p pilot --config int4_quantization /workspace/outputs
 ```
 
 The script runs offline inference through vLLM-Omni and writes:
@@ -42,8 +42,8 @@ model, vLLM-Omni version, PyTorch version, CUDA version, NVIDIA driver version,
 ffmpeg version, and Python version.
 
 The default generation config is Wan2.2 T2V at `832x480`, `81` frames, `40` steps, `16` fps, CFG guidance `4.0`, HuggingFace revision `5be7df9619b54f4e2667b2755bc6a756675b5cd7`, diffusion attention backend `FLASH_ATTN`, MP4 export quality `5.0`, `tensor_parallelism: 1`, and `cache_backend: null`.
-Use the `tp4` config for 4-way tensor parallelism. Use the `cache_dit` config (`cache_backend: cache_dit`) to enable Cache-DiT acceleration.
-Use the `int4` config to run `Intel/Wan2.2-T2V-A14B-Diffusers-int4-AutoRound` (`model_revision: main`).
+Use the `tp4_parallelism` config for 4-way tensor parallelism. Use the `cache_dit` config (`cache_backend: cache_dit`) to enable Cache-DiT acceleration.
+Use the `int4_quantization` config to run `Intel/Wan2.2-T2V-A14B-Diffusers-int4-AutoRound`.
 
 ## RunPod Image
 Build and push the image to Docker Hub from your host machine:

@@ -40,9 +40,9 @@ class InferenceConfig:
     model_revision: str
     attention_backend: str
     export_quality: float
-    tensor_parallelism: int = 1
-    cache_backend: str | None = None
-    random_seed: bool = False
+    tensor_parallelism: int
+    cache_backend: str | None
+    random_seed: bool
 
 
 @dataclass(frozen=True)
