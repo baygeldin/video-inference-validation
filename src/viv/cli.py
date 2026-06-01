@@ -513,10 +513,8 @@ class OfflineVideoGenerator:
         )
 
     def generate(self, prompt: Prompt, video_path: Path) -> GenerationResult:
-        import torch
         from diffusers.utils import export_to_video
         from vllm_omni.inputs.data import OmniDiffusionSamplingParams
-        from vllm_omni.platforms import current_omni_platform
 
         started_at = time.perf_counter()
         request: dict[str, object] = {"prompt": prompt.prompt}
@@ -524,13 +522,11 @@ class OfflineVideoGenerator:
         if self.config.random_seed:
             print(f"using random seed {seed} for {prompt.id}", flush=True)
 
-        torch_generator = torch.Generator(
-            device=current_omni_platform.device_type
-        ).manual_seed(seed)
         sampling_params = OmniDiffusionSamplingParams(
             height=self.config.height,
             width=self.config.width,
-            generator=torch_generator,
+            seed=seed,
+            generator_device="cpu",
             guidance_scale=self.config.guidance_scale,
             guidance_scale_2=self.config.guidance_scale_2,
             num_inference_steps=self.config.num_inference_steps,
