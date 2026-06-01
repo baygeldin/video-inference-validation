@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 import subprocess
 import sys
@@ -13,7 +14,9 @@ def collect_environment_metadata() -> dict[str, str | None]:
         "gpu_model": _gpu_model()
         or nvidia_smi.get("gpu_model")
         or _gpu_model_from_proc(),
+        "vllm_version": _package_version("vllm"),
         "vllm_omni_version": _package_version("vllm-omni"),
+        "vllm_omni_commit": _package_direct_url_commit("vllm-omni"),
         "pytorch_version": _pytorch_version(),
         "cuda_version": _cuda_version() or nvidia_smi.get("cuda_version"),
         "nvidia_driver_version": nvidia_smi.get("nvidia_driver_version")
@@ -28,6 +31,28 @@ def _package_version(package_name: str) -> str | None:
         return importlib_metadata.version(package_name)
     except importlib_metadata.PackageNotFoundError:
         return None
+
+
+def _package_direct_url_commit(package_name: str) -> str | None:
+    try:
+        distribution = importlib_metadata.distribution(package_name)
+    except importlib_metadata.PackageNotFoundError:
+        return None
+
+    direct_url = distribution.read_text("direct_url.json")
+    if not direct_url:
+        return None
+
+    try:
+        direct_url_data = json.loads(direct_url)
+    except json.JSONDecodeError:
+        return None
+
+    vcs_info = direct_url_data.get("vcs_info")
+    if not isinstance(vcs_info, dict):
+        return None
+    commit_id = vcs_info.get("commit_id")
+    return commit_id if isinstance(commit_id, str) and commit_id else None
 
 
 def _pytorch_version() -> str | None:

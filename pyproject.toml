@@ -10,8 +10,8 @@ dependencies = [
     "torch==2.11.0",
     "torchaudio==2.11.0",
     "torchvision==0.26.0",
-    "vllm==0.20.0",
-    "vllm-omni==0.20.0",
+    "vllm==0.22.0",
+    "vllm-omni @ git+https://github.com/vllm-project/vllm-omni.git@bc794e625f14ce425575210199bbb53f71cb860c",
 ]
 
 [project.scripts]
