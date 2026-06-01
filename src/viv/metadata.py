@@ -22,6 +22,7 @@ def write_sidecar_metadata(
         "prompt_id": prompt.id,
         "prompt_text": prompt.prompt,
         "seed": result.seed,
+        "initial_noise_latent_sha256": result.initial_noise_latent_sha256,
         "height": config.height,
         "width": config.width,
         "fps": config.fps,
