@@ -38,7 +38,7 @@ ENV PYTHONUNBUFFERED=1 \
     PIP_ROOT_USER_ACTION=ignore \
     UV_LINK_MODE=copy \
     UV_PYTHON_INSTALL_DIR=/opt/uv-python \
-    UV_TORCH_BACKEND=cu130 \
+    UV_PROJECT_ENVIRONMENT=/opt/venv \
     VIRTUAL_ENV=/opt/venv \
     XDG_CACHE_HOME=/workspace/.cache \
     HF_HOME=/workspace/.cache/huggingface \
@@ -53,21 +53,15 @@ RUN git lfs install --system \
     && ln -sf "${VIRTUAL_ENV}/bin/python" /usr/local/bin/python \
     && ln -sf "${VIRTUAL_ENV}/bin/python" /usr/local/bin/python3
 
-ARG VLLM_VERSION=0.20.0
-ARG VLLM_OMNI_REF=v0.20.0
+COPY pyproject.toml uv.lock .python-version /opt/video-inference-validation/
+RUN uv sync --project /opt/video-inference-validation --locked --no-dev --no-install-project
 
-RUN uv pip install "vllm==${VLLM_VERSION}" hf_transfer --torch-backend=cu130 \
-    && git clone --branch ${VLLM_OMNI_REF} --depth 1 https://github.com/vllm-project/vllm-omni.git /opt/vllm-omni \
-    && cd /opt/vllm-omni \
-    && uv pip install -e .
-
-COPY pyproject.toml /opt/video-inference-validation/
 COPY src /opt/video-inference-validation/src
 COPY prompts /opt/video-inference-validation/prompts
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 
-RUN uv pip install -e /opt/video-inference-validation
-RUN chmod +x /usr/local/bin/entrypoint.sh
+RUN uv sync --project /opt/video-inference-validation --locked --no-dev \
+    && chmod +x /usr/local/bin/entrypoint.sh
 
 WORKDIR /workspace
 
