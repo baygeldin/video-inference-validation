@@ -63,8 +63,7 @@ COPY prompts /opt/video-inference-validation/prompts
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 
 RUN --mount=type=cache,target=/workspace/.cache/uv \
-    uv sync --project /opt/video-inference-validation --locked --no-dev \
-    && chmod +x /usr/local/bin/entrypoint.sh
+    uv sync --project /opt/video-inference-validation --locked --no-dev
 
 WORKDIR /workspace
 
