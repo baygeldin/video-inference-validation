@@ -9,7 +9,12 @@ default: &default
   model_revision: 5be7df9619b54f4e2667b2755bc6a756675b5cd7
   attention_backend: FLASH_ATTN
   export_quality: 5.0
+  tensor_parallelism: 1
   random_seed: false
+
+tp4:
+  <<: *default
+  tensor_parallelism: 4
 
 cfg_disabled:
   <<: *default

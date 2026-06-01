@@ -40,6 +40,7 @@ class InferenceConfig:
     model_revision: str
     attention_backend: str
     export_quality: float
+    tensor_parallelism: int = 1
     random_seed: bool = False
 
 
@@ -93,7 +94,8 @@ def run(
         "using "
         f"{MODEL}@{config.model_revision}, "
         f"attention={config.attention_backend}, "
-        f"export_quality={config.export_quality}",
+        f"export_quality={config.export_quality}, "
+        f"tp={config.tensor_parallelism}",
         flush=True,
     )
     generator = OfflineVideoGenerator(config)
@@ -139,6 +141,7 @@ def write_sidecar_metadata(
         "attention_backend": config.attention_backend,
         "model_revision": config.model_revision,
         "quality": config.export_quality,
+        "tensor_parallelism": config.tensor_parallelism,
         "environment": dict(environment),
     }
     tmp_path = metadata_path.with_suffix(".tmp.json")
@@ -395,6 +398,9 @@ def load_inference_config(config_name: str) -> InferenceConfig:
             values["attention_backend"], name, "attention_backend"
         ),
         export_quality=_quality(values["export_quality"], name, "export_quality"),
+        tensor_parallelism=_positive_int(
+            values.get("tensor_parallelism", 1), name, "tensor_parallelism"
+        ),
         random_seed=_bool(values.get("random_seed", False), name, "random_seed"),
     )
 
@@ -470,7 +476,9 @@ class OfflineVideoGenerator:
         from vllm_omni.diffusion.data import DiffusionParallelConfig
         from vllm_omni.entrypoints.omni import Omni
 
-        parallel_config = DiffusionParallelConfig(tensor_parallel_size=1)
+        parallel_config = DiffusionParallelConfig(
+            tensor_parallel_size=self.config.tensor_parallelism
+        )
         self.omni = Omni(
             model=model_path,
             revision=config.model_revision,
