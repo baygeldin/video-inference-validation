@@ -5,7 +5,9 @@ import json
 import os
 import secrets
 import sys
+import time
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 
 
@@ -37,6 +39,12 @@ class InferenceConfig:
     random_seed: bool = False
 
 
+@dataclass(frozen=True)
+class GenerationResult:
+    seed: int
+    duration_seconds: float
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="viv",
@@ -61,14 +69,16 @@ def main(argv: list[str] | None = None) -> int:
     try:
         prompts_path = resolve_prompts_path(args.prompts_arg)
         config = load_inference_config(args.config)
-        run(prompts_path, args.output_dir, config)
+        run(prompts_path, args.output_dir, args.config.strip(), config)
     except Exception as exc:
         print(f"viv: error: {exc}", file=sys.stderr)
         return 2
     return 0
 
 
-def run(prompts_path: Path, output_dir: Path, config: InferenceConfig) -> None:
+def run(
+    prompts_path: Path, output_dir: Path, config_name: str, config: InferenceConfig
+) -> None:
     prompts = load_prompts(prompts_path)
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -82,9 +92,43 @@ def run(prompts_path: Path, output_dir: Path, config: InferenceConfig) -> None:
     generator = OfflineVideoGenerator(config)
     for prompt in prompts:
         video_path = output_dir / f"{prompt.id}.mp4"
+        metadata_path = output_dir / f"{prompt.id}.json"
         print(f"generating {prompt.id} -> {video_path}", flush=True)
-        generator.generate(prompt, video_path)
+        result = generator.generate(prompt, video_path)
+        write_sidecar_metadata(metadata_path, config_name, prompt, config, result)
         print(f"completed {prompt.id}", flush=True)
+
+
+def write_sidecar_metadata(
+    metadata_path: Path,
+    config_name: str,
+    prompt: Prompt,
+    config: InferenceConfig,
+    result: GenerationResult,
+) -> None:
+    metadata = {
+        "config_name": config_name,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "duration_seconds": result.duration_seconds,
+        "prompt_id": prompt.id,
+        "prompt_text": prompt.prompt,
+        "seed": result.seed,
+        "height": config.height,
+        "width": config.width,
+        "fps": config.fps,
+        "num_frames": config.num_frames,
+        "num_inference_steps": config.num_inference_steps,
+        "guidance_scale": config.guidance_scale,
+        "guidance_scale_2": config.guidance_scale_2,
+        "attention_backend": config.attention_backend,
+        "model_revision": config.model_revision,
+        "quality": config.export_quality,
+    }
+    tmp_path = metadata_path.with_suffix(".tmp.json")
+    with tmp_path.open("w", encoding="utf-8") as fh:
+        json.dump(metadata, fh, indent=2)
+        fh.write("\n")
+    tmp_path.replace(metadata_path)
 
 
 def load_prompts(path: Path) -> list[Prompt]:
@@ -271,12 +315,13 @@ class OfflineVideoGenerator:
             parallel_config=parallel_config,
         )
 
-    def generate(self, prompt: Prompt, video_path: Path) -> None:
+    def generate(self, prompt: Prompt, video_path: Path) -> GenerationResult:
         import torch
         from diffusers.utils import export_to_video
         from vllm_omni.inputs.data import OmniDiffusionSamplingParams
         from vllm_omni.platforms import current_omni_platform
 
+        started_at = time.perf_counter()
         request: dict[str, object] = {"prompt": prompt.prompt}
         seed = secrets.randbits(63) if self.config.random_seed else prompt.seed
         if self.config.random_seed:
@@ -304,6 +349,10 @@ class OfflineVideoGenerator:
             quality=self.config.export_quality,
         )
         tmp_path.replace(video_path)
+        return GenerationResult(
+            seed=seed,
+            duration_seconds=time.perf_counter() - started_at,
+        )
 
 
 def wan_video_frames(output: object) -> list[object]:
