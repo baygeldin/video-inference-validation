@@ -15,7 +15,6 @@ from importlib import metadata as importlib_metadata
 from pathlib import Path
 
 
-MODEL = "Wan-AI/Wan2.2-T2V-A14B-Diffusers"
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 PROMPTS_DIR = PROJECT_ROOT / "prompts"
 CONFIGS_PATH = PROJECT_ROOT / "configs.yml"
@@ -37,6 +36,7 @@ class InferenceConfig:
     num_inference_steps: int
     guidance_scale: float
     guidance_scale_2: float
+    model_name: str
     model_revision: str
     attention_backend: str
     export_quality: float
@@ -93,7 +93,7 @@ def run(
 
     print(
         "using "
-        f"{MODEL}@{config.model_revision}, "
+        f"{config.model_name}@{config.model_revision}, "
         f"attention={config.attention_backend}, "
         f"export_quality={config.export_quality}, "
         f"tp={config.tensor_parallelism}, "
@@ -140,6 +140,7 @@ def write_sidecar_metadata(
         "num_inference_steps": config.num_inference_steps,
         "guidance_scale": config.guidance_scale,
         "guidance_scale_2": config.guidance_scale_2,
+        "model_name": config.model_name,
         "attention_backend": config.attention_backend,
         "model_revision": config.model_revision,
         "quality": config.export_quality,
@@ -377,6 +378,7 @@ def load_inference_config(config_name: str) -> InferenceConfig:
         "num_inference_steps",
         "guidance_scale",
         "guidance_scale_2",
+        "model_name",
         "model_revision",
         "attention_backend",
         "export_quality",
@@ -396,6 +398,7 @@ def load_inference_config(config_name: str) -> InferenceConfig:
         ),
         guidance_scale=_float(values["guidance_scale"], name, "guidance_scale"),
         guidance_scale_2=_float(values["guidance_scale_2"], name, "guidance_scale_2"),
+        model_name=_non_empty_str(values["model_name"], name, "model_name"),
         model_revision=_non_empty_str(values["model_revision"], name, "model_revision"),
         attention_backend=_attention_backend(
             values["attention_backend"], name, "attention_backend"
@@ -493,7 +496,7 @@ class OfflineVideoGenerator:
     def __init__(self, config: InferenceConfig) -> None:
         self.config = config
         os.environ["DIFFUSION_ATTENTION_BACKEND"] = config.attention_backend
-        model_path = resolve_model_path(MODEL, config.model_revision)
+        model_path = resolve_model_path(config.model_name, config.model_revision)
 
         from vllm_omni.diffusion.data import DiffusionParallelConfig
         from vllm_omni.entrypoints.omni import Omni
