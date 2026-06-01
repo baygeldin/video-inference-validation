@@ -10,6 +10,7 @@ default: &default
   attention_backend: FLASH_ATTN
   export_quality: 5.0
   tensor_parallelism: 1
+  cache_backend: null
   random_seed: false
 
 tp4:
@@ -24,3 +25,7 @@ cfg_disabled:
 random_seed:
   <<: *default
   random_seed: true
+
+cache_dit:
+  <<: *default
+  cache_backend: cache_dit

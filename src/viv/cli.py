@@ -41,6 +41,7 @@ class InferenceConfig:
     attention_backend: str
     export_quality: float
     tensor_parallelism: int = 1
+    cache_backend: str | None = None
     random_seed: bool = False
 
 
@@ -95,7 +96,8 @@ def run(
         f"{MODEL}@{config.model_revision}, "
         f"attention={config.attention_backend}, "
         f"export_quality={config.export_quality}, "
-        f"tp={config.tensor_parallelism}",
+        f"tp={config.tensor_parallelism}, "
+        f"cache_backend={config.cache_backend}",
         flush=True,
     )
     generator = OfflineVideoGenerator(config)
@@ -142,6 +144,7 @@ def write_sidecar_metadata(
         "model_revision": config.model_revision,
         "quality": config.export_quality,
         "tensor_parallelism": config.tensor_parallelism,
+        "cache_backend": config.cache_backend,
         "environment": dict(environment),
     }
     tmp_path = metadata_path.with_suffix(".tmp.json")
@@ -401,6 +404,9 @@ def load_inference_config(config_name: str) -> InferenceConfig:
         tensor_parallelism=_positive_int(
             values.get("tensor_parallelism", 1), name, "tensor_parallelism"
         ),
+        cache_backend=_cache_backend(
+            values.get("cache_backend", None), name, "cache_backend"
+        ),
         random_seed=_bool(values.get("random_seed", False), name, "random_seed"),
     )
 
@@ -457,6 +463,22 @@ def _attention_backend(value: object, config_name: str, field: str) -> str:
     return parsed
 
 
+def _cache_backend(value: object, config_name: str, field: str) -> str | None:
+    if value is None:
+        return None
+
+    parsed = _non_empty_str(value, config_name, field).lower()
+    allowed = {"none", "cache_dit", "tea_cache"}
+    if parsed not in allowed:
+        joined = ", ".join(sorted(allowed))
+        raise ValueError(
+            f"config '{config_name}' field '{field}' must be one of: {joined}"
+        )
+    if parsed == "none":
+        return None
+    return parsed
+
+
 def resolve_model_path(model: str, revision: str) -> str:
     path = Path(model).expanduser()
     if path.exists():
@@ -484,6 +506,7 @@ class OfflineVideoGenerator:
             revision=config.model_revision,
             attention_backend=config.attention_backend,
             parallel_config=parallel_config,
+            cache_backend=config.cache_backend,
         )
 
     def generate(self, prompt: Prompt, video_path: Path) -> GenerationResult:
