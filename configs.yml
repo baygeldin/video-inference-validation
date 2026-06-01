@@ -14,6 +14,14 @@ default: &default
   cache_backend: null
   random_seed: false
 
+steps_minus_1:
+  <<: *default
+  num_inference_steps: 39
+
+steps_minus_10:
+  <<: *default
+  num_inference_steps: 30
+
 tp4_parallelism:
   <<: *default
   tensor_parallelism: 4
@@ -35,4 +43,3 @@ cache_dit:
 random_seed:
   <<: *default
   random_seed: true
-

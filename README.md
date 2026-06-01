@@ -22,6 +22,8 @@ Use `--config`/`-c` to select an inference config from `configs.yml`:
 ```bash
 viv -p pilot -c cfg_disabled /workspace/outputs
 viv -p pilot --config random_seed /workspace/outputs
+viv -p pilot --config steps_minus_1 /workspace/outputs
+viv -p pilot --config steps_minus_10 /workspace/outputs
 viv -p pilot --config tp4_parallelism /workspace/outputs
 viv -p pilot --config cache_dit /workspace/outputs
 viv -p pilot --config int4_quantization /workspace/outputs
