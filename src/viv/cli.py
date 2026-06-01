@@ -15,6 +15,8 @@ FPS = 16
 NUM_INFERENCE_STEPS = 40
 GUIDANCE_SCALE = 4.0
 GUIDANCE_SCALE_2 = 4.0
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PROMPTS_DIR = PROJECT_ROOT / "prompts"
 
 
 @dataclass(frozen=True)
@@ -29,12 +31,19 @@ def main(argv: list[str] | None = None) -> int:
         prog="viv",
         description="Generate Wan2.2 videos from a JSONL prompt file with vLLM-Omni.",
     )
-    parser.add_argument("prompts", type=Path, help="Path to JSONL file with prompts")
+    parser.add_argument(
+        "-p",
+        "--prompts",
+        dest="prompts_arg",
+        required=True,
+        help="Prompt collection identified, or path to the JSONL file",
+    )
     parser.add_argument("output_dir", type=Path, help="Output folder path")
     args = parser.parse_args(argv)
 
     try:
-        run(args.prompts, args.output_dir)
+        prompts_path = resolve_prompts_path(args.prompts_arg)
+        run(prompts_path, args.output_dir)
     except Exception as exc:
         print(f"viv: error: {exc}", file=sys.stderr)
         return 2
@@ -85,6 +94,21 @@ def load_prompts(path: Path) -> list[Prompt]:
     if not prompts:
         raise ValueError(f"{path}: no prompts found")
     return prompts
+
+
+def resolve_prompts_path(prompts_arg: str) -> Path:
+    raw = prompts_arg.strip()
+    if not raw:
+        raise ValueError("you must provide prompt collection")
+
+    named_prompt_path = PROMPTS_DIR / f"{raw}.jsonl"
+    if named_prompt_path.is_file():
+        return named_prompt_path
+
+    path = Path(raw).expanduser()
+    if path.is_absolute():
+        return path
+    return (Path.cwd() / path).resolve()
 
 
 class OfflineVideoGenerator:

@@ -14,7 +14,7 @@ Use JSONL with one prompt per line:
 ## Run
 
 ```bash
-viv prompts/pilot.jsonl /workspace/outputs
+viv -p pilot /workspace/outputs
 ```
 
 The script runs offline inference through vLLM-Omni and writes:
@@ -36,5 +36,5 @@ It will use the version from `pyproject.toml` to tag the image.
 Then, inside the pod:
 ```bash
 cd /opt/video-inference-validation
-viv prompts/pilot.jsonl /workspace/outputs
+viv -p pilot /workspace/outputs
 ```
