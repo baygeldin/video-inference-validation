@@ -1,0 +1,47 @@
+default: &default
+  model_name: Wan-AI/Wan2.2-T2V-A14B-Diffusers
+  model_revision: 5be7df9619b54f4e2667b2755bc6a756675b5cd7
+  attention_backend: FLASH_ATTN
+  width: 832
+  height: 480
+  num_frames: 81
+  fps: 16
+  num_inference_steps: 40
+  boundary_ratio: 0.875
+  flow_shift: 5.0
+  guidance_scale: 4.0
+  guidance_scale_2: 4.0
+  export_quality: 5.0
+  tensor_parallelism: 1
+  cache_backend: null
+  random_seed: false
+
+steps_minus_1:
+  <<: *default
+  num_inference_steps: 39
+
+steps_minus_10:
+  <<: *default
+  num_inference_steps: 30
+
+tp4_parallelism:
+  <<: *default
+  tensor_parallelism: 4
+
+int4_quantization:
+  <<: *default
+  model_name: Intel/Wan2.2-T2V-A14B-Diffusers-int4-AutoRound
+  model_revision: 0fe5b7a14c052f1473b5e0306e35c54791bc604d
+
+cfg_disabled:
+  <<: *default
+  guidance_scale: 1.0
+  guidance_scale_2: 1.0
+
+cache_dit:
+  <<: *default
+  cache_backend: cache_dit
+
+random_seed:
+  <<: *default
+  random_seed: true

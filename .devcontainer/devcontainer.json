@@ -3,9 +3,13 @@
   "build": {
     "dockerfile": "Dockerfile.dev"
   },
+  "runArgs": [
+    "--env-file",
+    "${localWorkspaceFolder}/.devcontainer/.env"
+  ],
   "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind",
   "workspaceFolder": "/workspace",
-  "postCreateCommand": "make install",
+  "postCreateCommand": "uv sync --locked",
   "containerEnv": {
     "CODEX_HOME": "/workspace/.codex"
   },
