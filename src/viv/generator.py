@@ -67,6 +67,8 @@ class OfflineVideoGenerator:
             seed=seed,
             generator_device="cpu",
             latents=latents,
+            boundary_ratio=self.config.boundary_ratio,
+            extra_args={"flow_shift": self.config.flow_shift},
             guidance_scale=self.config.guidance_scale,
             guidance_scale_2=self.config.guidance_scale_2,
             num_inference_steps=self.config.num_inference_steps,

@@ -38,12 +38,12 @@ The script runs offline inference through vLLM-Omni and writes:
 
 The JSON sidecar records the config name, UTC timestamp, generation duration,
 prompt id/text, actual seed, video dimensions, fps, frame count, inference
-steps, guidance scales, attention backend, model revision, MP4 export quality,
+steps, boundary ratio, flow shift, guidance scales, attention backend, model revision, MP4 export quality,
 tensor parallel size, cache backend, model name, and runtime environment details: GPU
 model, vLLM-Omni version, PyTorch version, CUDA version, NVIDIA driver version,
-ffmpeg version, and Python version.
+ffmpeg version, Python version, and baked container image tag when available.
 
-The default generation config is Wan2.2 T2V at `832x480`, `81` frames, `40` steps, `16` fps, CFG guidance `4.0`, HuggingFace revision `5be7df9619b54f4e2667b2755bc6a756675b5cd7`, diffusion attention backend `FLASH_ATTN`, MP4 export quality `5.0`, `tensor_parallelism: 1`, and `cache_backend: null`.
+The default generation config is Wan2.2 T2V at `832x480`, `81` frames, `40` steps, `16` fps, `boundary_ratio: 0.875`, `flow_shift: 12.0`, CFG guidance `4.0`, HuggingFace revision `5be7df9619b54f4e2667b2755bc6a756675b5cd7`, diffusion attention backend `FLASH_ATTN`, MP4 export quality `5.0`, `tensor_parallelism: 1`, and `cache_backend: null`.
 Use the `tp4_parallelism` config for 4-way tensor parallelism. Use the `cache_dit` config (`cache_backend: cache_dit`) to enable Cache-DiT acceleration.
 Use the `int4_quantization` config to run `Intel/Wan2.2-T2V-A14B-Diffusers-int4-AutoRound`.
 
@@ -53,7 +53,7 @@ Build and push the image to Docker Hub from your host machine:
 ./build-image.sh
 ```
 
-It will use the version from `pyproject.toml` to tag the image.
+It will use the current git short SHA to tag the image.
 
 Then, inside the pod:
 ```bash

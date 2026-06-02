@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 import sys
@@ -23,6 +24,7 @@ def collect_environment_metadata() -> dict[str, str | None]:
         or _nvidia_driver_version_from_proc(),
         "ffmpeg_version": _ffmpeg_version(),
         "python_version": sys.version,
+        "image_name": _env_value("VIV_IMAGE_NAME"),
     }
 
 
@@ -31,6 +33,13 @@ def _package_version(package_name: str) -> str | None:
         return importlib_metadata.version(package_name)
     except importlib_metadata.PackageNotFoundError:
         return None
+
+
+def _env_value(name: str) -> str | None:
+    value = os.environ.get(name)
+    if value is None:
+        return None
+    return value.strip() or None
 
 
 def _package_direct_url_commit(package_name: str) -> str | None:

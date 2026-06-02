@@ -30,6 +30,8 @@ def load_inference_config(config_name: str) -> InferenceConfig:
         "num_frames",
         "fps",
         "num_inference_steps",
+        "boundary_ratio",
+        "flow_shift",
         "guidance_scale",
         "guidance_scale_2",
         "model_name",
@@ -50,6 +52,8 @@ def load_inference_config(config_name: str) -> InferenceConfig:
         num_inference_steps=_positive_int(
             values["num_inference_steps"], name, "num_inference_steps"
         ),
+        boundary_ratio=_ratio(values["boundary_ratio"], name, "boundary_ratio"),
+        flow_shift=_positive_float(values["flow_shift"], name, "flow_shift"),
         guidance_scale=_float(values["guidance_scale"], name, "guidance_scale"),
         guidance_scale_2=_float(values["guidance_scale_2"], name, "guidance_scale_2"),
         model_name=_non_empty_str(values["model_name"], name, "model_name"),
@@ -83,6 +87,22 @@ def _float(value: object, config_name: str, field: str) -> float:
         return float(value)
     except (TypeError, ValueError) as exc:
         raise ValueError(f"config '{config_name}' field '{field}' must be a number") from exc
+
+
+def _positive_float(value: object, config_name: str, field: str) -> float:
+    parsed = _float(value, config_name, field)
+    if parsed <= 0:
+        raise ValueError(f"config '{config_name}' field '{field}' must be positive")
+    return parsed
+
+
+def _ratio(value: object, config_name: str, field: str) -> float:
+    parsed = _float(value, config_name, field)
+    if parsed < 0 or parsed > 1:
+        raise ValueError(
+            f"config '{config_name}' field '{field}' must be between 0 and 1"
+        )
+    return parsed
 
 
 def _quality(value: object, config_name: str, field: str) -> float:

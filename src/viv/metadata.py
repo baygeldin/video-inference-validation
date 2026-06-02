@@ -28,6 +28,8 @@ def write_sidecar_metadata(
         "fps": config.fps,
         "num_frames": config.num_frames,
         "num_inference_steps": config.num_inference_steps,
+        "boundary_ratio": config.boundary_ratio,
+        "flow_shift": config.flow_shift,
         "guidance_scale": config.guidance_scale,
         "guidance_scale_2": config.guidance_scale_2,
         "model_name": config.model_name,

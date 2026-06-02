@@ -18,6 +18,8 @@ class InferenceConfig:
     num_frames: int
     fps: int
     num_inference_steps: int
+    boundary_ratio: float
+    flow_shift: float
     guidance_scale: float
     guidance_scale_2: float
     model_name: str

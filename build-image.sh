@@ -13,7 +13,12 @@ fi
 
 IMAGE_NAME="${IMAGE_REPO}:${IMAGE_TAG}"
 
-docker build --platform "$PLATFORM" -f "$DOCKERFILE" -t "$IMAGE_NAME" .
+docker build \
+  --platform "$PLATFORM" \
+  -f "$DOCKERFILE" \
+  --build-arg "VIV_IMAGE_NAME=$IMAGE_NAME" \
+  -t "$IMAGE_NAME" \
+  .
 docker push "$IMAGE_NAME"
 
 printf 'Built and pushed %s\n' "$IMAGE_NAME"

@@ -3,6 +3,7 @@ FROM nvidia/cuda:13.0.2-devel-ubuntu24.04
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 ARG PYTHON_VERSION=3.13.11
+ARG VIV_IMAGE_NAME=unknown
 
 ENV DEBIAN_FRONTEND=noninteractive \
     SHELL=/bin/bash
@@ -45,6 +46,7 @@ ENV PYTHONUNBUFFERED=1 \
     HF_HUB_ENABLE_HF_TRANSFER=1 \
     HF_XET_HIGH_PERFORMANCE=1 \
     VLLM_OMNI_TARGET_DEVICE=cuda \
+    VIV_IMAGE_NAME="${VIV_IMAGE_NAME}" \
     PATH=/opt/venv/bin:$PATH
 
 RUN git lfs install --system \
