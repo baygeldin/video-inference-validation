@@ -8,7 +8,7 @@ default: &default
   fps: 16
   num_inference_steps: 40
   boundary_ratio: 0.875
-  flow_shift: 12.0
+  flow_shift: 5.0
   guidance_scale: 4.0
   guidance_scale_2: 4.0
   export_quality: 5.0
