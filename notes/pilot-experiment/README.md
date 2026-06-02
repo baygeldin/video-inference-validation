@@ -1,5 +1,27 @@
 # Pilot experiment
 
+## Conclusions
+
+### GPU model matters *a lot*
+
+When the GPU model is **exactly the same**, the results are consistent, meaning that we can expect basically the same result across different generations. However, when the GPU is different, the results are unpredictable.
+
+For example, the default configuration on H100 SXM, H100 NVL, and even H200 SXM look very similar and would likely be comparable algorithmically. However, the same generation on A100 PCIe and A100 SXM is visually distinct enough that it's hard to say if one of them simply didn't have one less denoising step.
+
+It's particularly interesting that it matters, perhaps, more than even the attention backend. I tried to use the `TORCH_SDPA` on H100 SXM and it also looks very similar to the default configuration.
+
+Additionally, I tried this on B200 (because it doesn't seem to support `FLASH_ATTN` in vLLM-Omni currently) and the result looks rather similar to the `tp4_parallelism` config.
+
+### Hardest malign deviation is "one less denoising step"
+
+The good news is that most malign configurations are significantly different from the default one:
+- I managed to set up INT4 W4A16 quantization, and it looks blurry and low quality compared to original.
+- Cache-DiT is not too bad, but still distinctly different. 
+- 30 instead of 40 denoising steps also leads to different results.
+- Disabled CFG results in a complete mess (makes sense, of course).
+
+However, when it comes to the `steps_minus_1` config, it sometimes hard to distinguish it from legit benign deviations.
+
 ## Configurations tested
 
 To see the full parameters and environment configuration for each generation, check out the `.json` sidecars in this folder.
