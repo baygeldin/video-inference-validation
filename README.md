@@ -1,17 +1,16 @@
 # Video Inference Validation
 
-Tiny vLLM-Omni text-to-video runner for the first experiment pass.
+This repository contains a harness for running inference validation experiments for video models, specifically Wan2.2-T2V-A14B.
+The experiment is described in more detail here: https://github.com/gonka-ai/gonka/discussions/1155#discussioncomment-16976435
 
-## Prompt File
+## Structure
+- `prompts/` contains the built-in prompt datasets
+- `configs.yml` defines the available inference configurations
 
-Use JSONL with one prompt per line:
-
-```jsonl
-{"id":"pilot-0001","seed":420001,"prompt":"A blue car drives past a white picket fence on a sunny day"}
-{"id":"pilot-0002","seed":420002,"prompt":"A cat slinking to the left side of a cozy living room"}
-```
-
-## Run
+## Usage
+- Build and publish the `Dockerfile.runpod` image with `build-image.sh`
+- Choose the desired GPU configuration on RunPod.io and deploy the image to the pod
+- SSH into the container and run inference with the `viv` CLI
 
 ```bash
 viv -p pilot /workspace/outputs
@@ -36,27 +35,39 @@ The script runs offline inference through vLLM-Omni and writes:
 /workspace/outputs/<id>.json
 ```
 
-The JSON sidecar records the config name, UTC timestamp, generation duration,
-prompt id/text, actual seed, video dimensions, fps, frame count, inference
-steps, boundary ratio, flow shift, guidance scales, attention backend, model revision, MP4 export quality,
-tensor parallel size, cache backend, model name, and runtime environment details: GPU
-model, vLLM-Omni version, PyTorch version, CUDA version, NVIDIA driver version,
-ffmpeg version, Python version, and baked container image tag when available.
-
-The default generation config is Wan2.2 T2V at `832x480`, `81` frames, `40` steps, `16` fps, `boundary_ratio: 0.875`, `flow_shift: 12.0`, CFG guidance `4.0`, HuggingFace revision `5be7df9619b54f4e2667b2755bc6a756675b5cd7`, diffusion attention backend `FLASH_ATTN`, MP4 export quality `5.0`, `tensor_parallelism: 1`, and `cache_backend: null`.
-Use the `tp4_parallelism` config for 4-way tensor parallelism. Use the `cache_dit` config (`cache_backend: cache_dit`) to enable Cache-DiT acceleration.
-Use the `int4_quantization` config to run `Intel/Wan2.2-T2V-A14B-Diffusers-int4-AutoRound`.
-
-## RunPod Image
-Build and push the image to Docker Hub from your host machine:
-```bash
-./build-image.sh
-```
-
-It will use the current git short SHA to tag the image.
-
-Then, inside the pod:
-```bash
-cd /opt/video-inference-validation
-viv -p pilot /workspace/outputs
+The JSON sidecar records the generation parameters and runtime environment:
+```json
+{
+  "config_name": "default",
+  "timestamp": "2026-06-02T11:36:05.916536+00:00",
+  "duration_seconds": 415.33602340100333,
+  "prompt_id": "pilot-0001",
+  "prompt_text": "A blue car drives past a white picket fence on a sunny day",
+  "seed": 420001,
+  "initial_noise_latent_sha256": "980eaf0a67d5d9de2c386cebe874d0f8dbe05103d7b76fdf49e59d02185f7807",
+  "height": 480,
+  "width": 832,
+  "fps": 16,
+  "num_frames": 81,
+  "num_inference_steps": 40,
+  "guidance_scale": 4.0,
+  "guidance_scale_2": 4.0,
+  "model_name": "Wan-AI/Wan2.2-T2V-A14B-Diffusers",
+  "attention_backend": "FLASH_ATTN",
+  "model_revision": "5be7df9619b54f4e2667b2755bc6a756675b5cd7",
+  "quality": 5.0,
+  "tensor_parallelism": 1,
+  "cache_backend": null,
+  "environment": {
+    "gpu_model": "NVIDIA H100 80GB HBM3",
+    "vllm_version": "0.22.0",
+    "vllm_omni_version": "0.22.0rc2.dev13+gbc794e625",
+    "vllm_omni_commit": "bc794e625f14ce425575210199bbb53f71cb860c",
+    "pytorch_version": "2.11.0+cu130",
+    "cuda_version": "13.0",
+    "nvidia_driver_version": "580.159.03",
+    "ffmpeg_version": "6.1.1-3ubuntu5",
+    "python_version": "3.13.11 (main, Jan 28 2026, 00:01:45) [Clang 21.1.4 ]"
+  }
+}
 ```

@@ -17,7 +17,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "-p",
         "--prompts",
-        dest="prompts_arg",
+        dest="prompts",
         required=True,
         help="Prompt collection identifier, or path to the JSONL file",
     )
@@ -31,7 +31,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     try:
-        prompts_path = resolve_prompts_path(args.prompts_arg)
+        prompts_path = resolve_prompts_path(args.prompts)
         config = load_inference_config(args.config)
         run(prompts_path, args.output_dir, args.config.strip(), config)
     except Exception as exc:
