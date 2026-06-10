@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import hashlib
-import json
 import os
 import secrets
 import time
@@ -9,6 +7,15 @@ from pathlib import Path
 from typing import Any
 
 from viv.frames import wan_video_frames
+from viv.latent_capture import (
+    LATENT_PREFIX_EXTRA_ARG,
+    final_noise_latent_path,
+    initial_noise_latent_path,
+    install_wan_latent_capture,
+    latent_sha256,
+    safetensors_sha256_metadata,
+    save_initial_noise_latents,
+)
 from viv.models import GenerationResult, InferenceConfig, Prompt
 
 WAN_LATENT_CHANNELS = 16
@@ -31,6 +38,8 @@ class OfflineVideoGenerator:
         self.config = config
         os.environ["DIFFUSION_ATTENTION_BACKEND"] = config.attention_backend
         model_path = resolve_model_path(config.model_name, config.model_revision)
+
+        install_wan_latent_capture()
 
         from vllm_omni.diffusion.data import DiffusionParallelConfig
         from vllm_omni.entrypoints.omni import Omni
@@ -57,9 +66,12 @@ class OfflineVideoGenerator:
             print(f"using random seed {seed} for {prompt.id}", flush=True)
 
         latents = _initial_noise_latents(self.config, seed)
-        latent_sha256 = _latent_sha256(latents)
-        latent_path = _initial_noise_latent_path(video_path)
-        _save_initial_noise_latents(latent_path, latents, seed, latent_sha256)
+        initial_latent_sha256 = latent_sha256(latents)
+        initial_latent_path = initial_noise_latent_path(video_path)
+        save_initial_noise_latents(
+            initial_latent_path, latents, seed, initial_latent_sha256
+        )
+        final_latent_path = final_noise_latent_path(video_path)
 
         sampling_params = OmniDiffusionSamplingParams(
             height=self.config.height,
@@ -68,7 +80,10 @@ class OfflineVideoGenerator:
             generator_device="cpu",
             latents=latents,
             boundary_ratio=self.config.boundary_ratio,
-            extra_args={"flow_shift": self.config.flow_shift},
+            extra_args={
+                "flow_shift": self.config.flow_shift,
+                LATENT_PREFIX_EXTRA_ARG: str(video_path.with_suffix("").resolve()),
+            },
             guidance_scale=self.config.guidance_scale,
             guidance_scale_2=self.config.guidance_scale_2,
             num_inference_steps=self.config.num_inference_steps,
@@ -84,15 +99,13 @@ class OfflineVideoGenerator:
             quality=self.config.export_quality,
         )
         tmp_path.replace(video_path)
+        final_latent_sha256 = safetensors_sha256_metadata(final_latent_path)
         return GenerationResult(
             seed=seed,
             duration_seconds=time.perf_counter() - started_at,
-            initial_noise_latent_sha256=latent_sha256,
+            initial_noise_latent_sha256=initial_latent_sha256,
+            final_noise_latent_sha256=final_latent_sha256,
         )
-
-
-def _initial_noise_latent_path(video_path: Path) -> Path:
-    return video_path.with_name(f"{video_path.stem}.initial_noise_latent.safetensors")
 
 
 def _initial_noise_latents(config: InferenceConfig, seed: int) -> Any:
@@ -114,41 +127,3 @@ def _initial_noise_latents(config: InferenceConfig, seed: int) -> Any:
     )
     generator = torch.Generator(device="cpu").manual_seed(seed)
     return randn_tensor(shape, generator=generator, device="cpu", dtype=torch.float32)
-
-
-def _latent_sha256(tensor: Any) -> str:
-    import torch
-
-    if not isinstance(tensor, torch.Tensor):
-        raise TypeError(f"expected torch.Tensor, got {type(tensor).__name__}")
-
-    metadata = {
-        "dtype": str(tensor.dtype).removeprefix("torch."),
-        "shape": list(tensor.shape),
-    }
-    metadata_bytes = json.dumps(metadata, sort_keys=True, separators=(",", ":")).encode(
-        "utf-8"
-    )
-    array = tensor.detach().cpu().contiguous().numpy()
-    digest = hashlib.sha256()
-    digest.update(metadata_bytes)
-    digest.update(b"\0")
-    digest.update(array.tobytes(order="C"))
-    return digest.hexdigest()
-
-
-def _save_initial_noise_latents(
-    latent_path: Path, latents: Any, seed: int, latent_sha256: str
-) -> None:
-    from safetensors.torch import save_file
-
-    tmp_path = latent_path.with_name(f"{latent_path.stem}.tmp{latent_path.suffix}")
-    save_file(
-        {"latents": latents.detach().cpu().contiguous()},
-        str(tmp_path),
-        metadata={
-            "seed": str(seed),
-            "sha256": latent_sha256,
-        },
-    )
-    tmp_path.replace(latent_path)
