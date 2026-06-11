@@ -15,7 +15,6 @@ from viv.latent_capture import (
     final_noise_latent_path,
     initial_noise_latent_path,
     install_wan_latent_capture,
-    latent_sha256,
     load_latents,
     safetensors_sha256_metadata,
     save_initial_noise_latents,
@@ -97,16 +96,12 @@ class OfflineVideoGenerator:
                 initial_latent_sha256 = safetensors_sha256_metadata(
                     initial_latent_path
                 )
-            elif self.save_latents:
-                initial_latent_sha256 = latent_sha256(latents)
-
             if self.save_latents:
-                save_initial_noise_latents(
+                initial_latent_sha256 = save_initial_noise_latents(
                     initial_noise_latent_path(video_path),
                     latents,
                     seed,
-                    initial_latent_sha256 or latent_sha256(latents),
-                )
+                ) or initial_latent_sha256
                 final_latent_path = final_noise_latent_path(video_path)
 
         extra_args: dict[str, object] = {

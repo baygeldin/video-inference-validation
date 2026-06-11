@@ -78,7 +78,6 @@ def install_wan_latent_capture() -> None:
                     latents,
                     {
                         "seed": getattr(self, "_viv_seed", None),
-                        "sha256": latent_sha256(latents),
                     },
                 )
             return latents
@@ -100,12 +99,12 @@ def install_wan_latent_capture() -> None:
             self, noise_pred, t, latents, do_true_cfg, *args, **kwargs
         )
         step_idx = getattr(self, "_viv_step_idx", 0)
-        _save_latents(
+        _save_noise_pred(
             _denoising_step_latent_path_from_prefix(
                 getattr(self, "_viv_latent_prefix", None), step_idx
             ),
             "denoising_step",
-            updated_latents,
+            noise_pred,
             {
                 "seed": getattr(self, "_viv_seed", None),
                 "step_idx": step_idx,
@@ -144,16 +143,31 @@ def denoising_step_latent_paths(video_path: Path, num_inference_steps: int) -> l
 def load_latents(
     latent_path: Path, device: Any | None = None, dtype: Any | None = None
 ) -> Any:
+    return _load_tensor(latent_path, "latents", device=device, dtype=dtype)
+
+
+def _load_noise_pred(
+    latent_path: Path, device: Any | None = None, dtype: Any | None = None
+) -> Any:
+    return _load_tensor(latent_path, "noise_pred", device=device, dtype=dtype)
+
+
+def _load_tensor(
+    tensor_path: Path,
+    key: str,
+    device: Any | None = None,
+    dtype: Any | None = None,
+) -> Any:
     from safetensors.torch import load_file
 
-    tensors = load_file(str(latent_path), device="cpu")
+    tensors = load_file(str(tensor_path), device="cpu")
     try:
-        latents = tensors["latents"]
+        tensor = tensors[key]
     except KeyError as exc:
-        raise ValueError(f"{latent_path} does not contain a latents tensor") from exc
+        raise ValueError(f"{tensor_path} does not contain a {key} tensor") from exc
     if device is not None or dtype is not None:
-        latents = latents.to(device=device, dtype=dtype)
-    return latents
+        tensor = tensor.to(device=device, dtype=dtype)
+    return tensor
 
 
 def latent_sha256(tensor: Any) -> str:
@@ -163,6 +177,7 @@ def latent_sha256(tensor: Any) -> str:
     if not isinstance(tensor, torch.Tensor):
         raise TypeError(f"expected torch.Tensor, got {type(tensor).__name__}")
 
+    tensor = tensor.detach().cpu().contiguous()
     metadata = {
         "dtype": str(tensor.dtype).removeprefix("torch."),
         "shape": list(tensor.shape),
@@ -170,24 +185,23 @@ def latent_sha256(tensor: Any) -> str:
     metadata_bytes = json.dumps(metadata, sort_keys=True, separators=(",", ":")).encode(
         "utf-8"
     )
-    array = tensor.detach().cpu().contiguous().numpy()
+    raw_bytes = tensor.view(torch.uint8).numpy().tobytes(order="C")
     digest = hashlib.sha256()
     digest.update(metadata_bytes)
     digest.update(b"\0")
-    digest.update(array.tobytes(order="C"))
+    digest.update(raw_bytes)
     return digest.hexdigest()
 
 
 def save_initial_noise_latents(
-    latent_path: Path, latents: Any, seed: int, latent_sha256: str
-) -> None:
-    _save_latents(
+    latent_path: Path, latents: Any, seed: int
+) -> str | None:
+    return _save_latents(
         latent_path,
         "initial_noise",
         latents,
         {
             "seed": seed,
-            "sha256": latent_sha256,
         },
     )
 
@@ -204,34 +218,61 @@ def safetensors_sha256_metadata(latent_path: Path) -> str:
 
 
 def _save_latents(
-    latent_path: Path | None, kind: str, latents: Any, metadata: dict[str, Any]
-) -> None:
-    if latent_path is None or latents is None or not _is_rank_zero():
-        return
+    latent_path: Path | None,
+    kind: str,
+    latents: Any,
+    metadata: dict[str, Any],
+) -> str | None:
+    return _save_tensor(latent_path, "latents", kind, latents, metadata)
+
+
+def _save_noise_pred(
+    latent_path: Path | None,
+    kind: str,
+    noise_pred: Any,
+    metadata: dict[str, Any],
+) -> str | None:
+    return _save_tensor(latent_path, "noise_pred", kind, noise_pred, metadata)
+
+
+def _save_tensor(
+    tensor_path: Path | None,
+    key: str,
+    kind: str,
+    tensor: Any,
+    metadata: dict[str, Any],
+) -> str | None:
+    if tensor_path is None or tensor is None or not _is_rank_zero():
+        return None
 
     import torch
     from safetensors.torch import save_file
 
-    latents = _resolve_latents(latents)
-    if not isinstance(latents, torch.Tensor):
-        return
+    tensor = _resolve_latents(tensor)
+    if not isinstance(tensor, torch.Tensor):
+        return None
 
-    latent_path.parent.mkdir(parents=True, exist_ok=True)
-    tmp_path = latent_path.with_name(f"{latent_path.stem}.tmp{latent_path.suffix}")
+    tensor_to_save = tensor.detach().to("cpu").contiguous()
+    sha256 = latent_sha256(tensor_to_save)
+
+    tensor_path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = tensor_path.with_name(f"{tensor_path.stem}.tmp{tensor_path.suffix}")
     stored_metadata = {
         "kind": kind,
         **{
-            key: str(value)
-            for key, value in metadata.items()
-            if value is not None
+            metadata_key: str(value)
+            for metadata_key, value in metadata.items()
+            if value is not None and metadata_key != "sha256"
         },
+        "sha256": sha256,
     }
     save_file(
-        {"latents": latents.detach().to("cpu").contiguous()},
+        {key: tensor_to_save},
         str(tmp_path),
         metadata=stored_metadata,
     )
-    tmp_path.replace(latent_path)
+    tmp_path.replace(tensor_path)
+    return sha256
 
 
 def _prefix_from_request(req: Any) -> Path | None:
@@ -328,28 +369,12 @@ def _diffuse_with_reused_denoising(
                 latent_path = _denoising_step_latent_path_from_prefix(
                     reuse_prefix, step_idx
                 )
-                target_latents = load_latents(
-                    latent_path, device=latents.device, dtype=latents.dtype
+                noise_pred = _load_noise_pred(
+                    latent_path, device=latents.device, dtype=dtype
                 )
-                _replay_scheduler_step_from_target(
-                    self.scheduler, t, latents, target_latents
+                latents = self.scheduler_step_maybe_with_cfg(
+                    noise_pred, t, latents, do_true_cfg=False
                 )
-                latents = target_latents
-                _save_latents(
-                    _denoising_step_latent_path_from_prefix(
-                        getattr(self, "_viv_latent_prefix", None), step_idx
-                    ),
-                    "denoising_step",
-                    latents,
-                    {
-                        "seed": getattr(self, "_viv_seed", None),
-                        "step_idx": step_idx,
-                        "timestep": _scalar_float(t),
-                        "sigma": sigma,
-                        "reused_from": str(latent_path),
-                    },
-                )
-                self._viv_step_idx = step_idx + 1
                 pbar.update()
                 continue
 
@@ -497,64 +522,6 @@ def _sigma_for_step(scheduler: Any, step_idx: int, timestep: Any) -> float:
         getattr(scheduler, "num_train_timesteps", 1000),
     )
     return _scalar_float(timestep) / float(num_train_timesteps)
-
-
-def _replay_scheduler_step_from_target(
-    scheduler: Any, timestep: Any, sample: Any, target_sample: Any
-) -> None:
-    import torch
-
-    state = _snapshot_scheduler_state(scheduler)
-    zero_noise_pred = torch.zeros_like(sample)
-    one_noise_pred = torch.ones_like(sample)
-
-    zero_output = _direct_scheduler_step(scheduler, zero_noise_pred, timestep, sample)
-    _restore_scheduler_state(scheduler, state)
-    one_output = _direct_scheduler_step(scheduler, one_noise_pred, timestep, sample)
-    _restore_scheduler_state(scheduler, state)
-
-    coefficient = one_output - zero_output
-    noise_pred = torch.where(
-        coefficient != 0,
-        (target_sample - zero_output) / coefficient,
-        torch.zeros_like(target_sample),
-    )
-    _direct_scheduler_step(scheduler, noise_pred, timestep, sample)
-
-
-def _direct_scheduler_step(
-    scheduler: Any, noise_pred: Any, timestep: Any, sample: Any
-) -> Any:
-    output = scheduler.step(noise_pred, timestep, sample, return_dict=True)
-    return output.prev_sample if hasattr(output, "prev_sample") else output[0]
-
-
-def _snapshot_scheduler_state(scheduler: Any) -> dict[str, Any]:
-    return {
-        "model_outputs": list(getattr(scheduler, "model_outputs", [])),
-        "timestep_list": list(getattr(scheduler, "timestep_list", [])),
-        "lower_order_nums": getattr(scheduler, "lower_order_nums", None),
-        "last_sample": getattr(scheduler, "last_sample", None),
-        "_step_index": getattr(scheduler, "_step_index", None),
-        "_begin_index": getattr(scheduler, "_begin_index", None),
-        "this_order": getattr(scheduler, "this_order", None),
-    }
-
-
-def _restore_scheduler_state(scheduler: Any, state: dict[str, Any]) -> None:
-    if hasattr(scheduler, "model_outputs"):
-        scheduler.model_outputs = list(state["model_outputs"])
-    if hasattr(scheduler, "timestep_list"):
-        scheduler.timestep_list = list(state["timestep_list"])
-    for name in (
-        "lower_order_nums",
-        "last_sample",
-        "_step_index",
-        "_begin_index",
-        "this_order",
-    ):
-        if hasattr(scheduler, name):
-            setattr(scheduler, name, state[name])
 
 
 def _reset_scheduler_to_step(scheduler: Any, step_idx: int) -> None:

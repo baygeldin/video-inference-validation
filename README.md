@@ -29,13 +29,14 @@ viv -p pilot --config int4_quantization /workspace/outputs
 ```
 
 Latent capture is disabled by default. Use `--save-latents` to also write the
-initial noise latent, final noise latent, and each denoising step latent:
+initial noise latent, final noise latent, and each denoising step model
+prediction:
 
 ```bash
 viv -p pilot --save-latents /workspace/outputs
 ```
 
-Saved latents can be reused by pointing at the folder that contains files named
+Saved tensors can be reused by pointing at the folder that contains files named
 like `<id>.initial_noise_latent.safetensors`,
 `<id>.denoising_step_0.safetensors`, and
 `<id>.final_noise_latent.safetensors`:
@@ -52,7 +53,7 @@ viv -p pilot --reuse-latents-from /workspace/previous-outputs \
 ```
 
 Denoising reuse also starts from the saved initial latent so the scheduler can
-replay its internal state from the saved latent trajectory before continuing.
+replay its internal state from the saved model predictions before continuing.
 
 The script runs offline inference through vLLM-Omni and writes:
 
