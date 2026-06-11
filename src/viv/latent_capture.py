@@ -328,9 +328,13 @@ def _diffuse_with_reused_denoising(
                 latent_path = _denoising_step_latent_path_from_prefix(
                     reuse_prefix, step_idx
                 )
-                latents = load_latents(
+                target_latents = load_latents(
                     latent_path, device=latents.device, dtype=latents.dtype
                 )
+                _replay_scheduler_step_from_target(
+                    self.scheduler, t, latents, target_latents
+                )
+                latents = target_latents
                 _save_latents(
                     _denoising_step_latent_path_from_prefix(
                         getattr(self, "_viv_latent_prefix", None), step_idx
@@ -349,8 +353,9 @@ def _diffuse_with_reused_denoising(
                 pbar.update()
                 continue
 
-            if not resumed_scheduler and step_idx > 0:
-                _reset_scheduler_to_step(self.scheduler, step_idx)
+            if not resumed_scheduler:
+                if step_idx > 0 and getattr(self.scheduler, "step_index", None) is None:
+                    _reset_scheduler_to_step(self.scheduler, step_idx)
                 resumed_scheduler = True
 
             if boundary_timestep is not None and t < boundary_timestep:
@@ -492,6 +497,64 @@ def _sigma_for_step(scheduler: Any, step_idx: int, timestep: Any) -> float:
         getattr(scheduler, "num_train_timesteps", 1000),
     )
     return _scalar_float(timestep) / float(num_train_timesteps)
+
+
+def _replay_scheduler_step_from_target(
+    scheduler: Any, timestep: Any, sample: Any, target_sample: Any
+) -> None:
+    import torch
+
+    state = _snapshot_scheduler_state(scheduler)
+    zero_noise_pred = torch.zeros_like(sample)
+    one_noise_pred = torch.ones_like(sample)
+
+    zero_output = _direct_scheduler_step(scheduler, zero_noise_pred, timestep, sample)
+    _restore_scheduler_state(scheduler, state)
+    one_output = _direct_scheduler_step(scheduler, one_noise_pred, timestep, sample)
+    _restore_scheduler_state(scheduler, state)
+
+    coefficient = one_output - zero_output
+    noise_pred = torch.where(
+        coefficient != 0,
+        (target_sample - zero_output) / coefficient,
+        torch.zeros_like(target_sample),
+    )
+    _direct_scheduler_step(scheduler, noise_pred, timestep, sample)
+
+
+def _direct_scheduler_step(
+    scheduler: Any, noise_pred: Any, timestep: Any, sample: Any
+) -> Any:
+    output = scheduler.step(noise_pred, timestep, sample, return_dict=True)
+    return output.prev_sample if hasattr(output, "prev_sample") else output[0]
+
+
+def _snapshot_scheduler_state(scheduler: Any) -> dict[str, Any]:
+    return {
+        "model_outputs": list(getattr(scheduler, "model_outputs", [])),
+        "timestep_list": list(getattr(scheduler, "timestep_list", [])),
+        "lower_order_nums": getattr(scheduler, "lower_order_nums", None),
+        "last_sample": getattr(scheduler, "last_sample", None),
+        "_step_index": getattr(scheduler, "_step_index", None),
+        "_begin_index": getattr(scheduler, "_begin_index", None),
+        "this_order": getattr(scheduler, "this_order", None),
+    }
+
+
+def _restore_scheduler_state(scheduler: Any, state: dict[str, Any]) -> None:
+    if hasattr(scheduler, "model_outputs"):
+        scheduler.model_outputs = list(state["model_outputs"])
+    if hasattr(scheduler, "timestep_list"):
+        scheduler.timestep_list = list(state["timestep_list"])
+    for name in (
+        "lower_order_nums",
+        "last_sample",
+        "_step_index",
+        "_begin_index",
+        "this_order",
+    ):
+        if hasattr(scheduler, name):
+            setattr(scheduler, name, state[name])
 
 
 def _reset_scheduler_to_step(scheduler: Any, step_idx: int) -> None:

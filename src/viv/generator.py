@@ -78,13 +78,13 @@ class OfflineVideoGenerator:
             print(f"using random seed {seed} for {prompt.id}", flush=True)
 
         reuse_prefix = _latent_reuse_prefix(self.latent_reuse, video_path)
+        reuse_initial_latent = self.latent_reuse is not None and (
+            self.latent_reuse.reuse_initial_latent
+            or self.latent_reuse.denoising_sigma_threshold is not None
+        )
         if self.latent_reuse is not None and self.latent_reuse.reuse_final_latent:
             latents = None
-        elif (
-            self.latent_reuse is not None
-            and self.latent_reuse.reuse_initial_latent
-            and reuse_prefix is not None
-        ):
+        elif reuse_initial_latent and reuse_prefix is not None:
             latents = load_latents(initial_noise_latent_path(reuse_prefix))
         else:
             latents = _initial_noise_latents(self.config, seed)
@@ -92,11 +92,7 @@ class OfflineVideoGenerator:
         initial_latent_sha256 = None
         final_latent_path = None
         if latents is not None:
-            if (
-                self.latent_reuse is not None
-                and self.latent_reuse.reuse_initial_latent
-                and reuse_prefix is not None
-            ):
+            if reuse_initial_latent and reuse_prefix is not None:
                 initial_latent_path = initial_noise_latent_path(reuse_prefix)
                 initial_latent_sha256 = safetensors_sha256_metadata(
                     initial_latent_path

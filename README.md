@@ -51,6 +51,9 @@ viv -p pilot --reuse-latents-from /workspace/previous-outputs \
   --reuse-final-latent /workspace/outputs
 ```
 
+Denoising reuse also starts from the saved initial latent so the scheduler can
+replay its internal state from the saved latent trajectory before continuing.
+
 The script runs offline inference through vLLM-Omni and writes:
 
 ```text
