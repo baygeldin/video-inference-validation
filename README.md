@@ -35,6 +35,22 @@ initial noise latent, final noise latent, and each denoising step latent:
 viv -p pilot --save-latents /workspace/outputs
 ```
 
+Saved latents can be reused by pointing at the folder that contains files named
+like `<id>.initial_noise_latent.safetensors`,
+`<id>.denoising_step_0.safetensors`, and
+`<id>.final_noise_latent.safetensors`:
+
+```bash
+viv -p pilot --reuse-latents-from /workspace/previous-outputs \
+  --reuse-initial-latent /workspace/outputs
+
+viv -p pilot --reuse-latents-from /workspace/previous-outputs \
+  --reuse-denoising-above-sigma 0.55 /workspace/outputs
+
+viv -p pilot --reuse-latents-from /workspace/previous-outputs \
+  --reuse-final-latent /workspace/outputs
+```
+
 The script runs offline inference through vLLM-Omni and writes:
 
 ```text

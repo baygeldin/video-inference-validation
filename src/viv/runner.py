@@ -5,7 +5,7 @@ from pathlib import Path
 from viv.environment import collect_environment_metadata
 from viv.generator import OfflineVideoGenerator
 from viv.metadata import write_sidecar_metadata
-from viv.models import InferenceConfig
+from viv.models import InferenceConfig, LatentReuseConfig
 from viv.prompts import load_prompts
 
 
@@ -15,6 +15,7 @@ def run(
     config_name: str,
     config: InferenceConfig,
     save_latents: bool = False,
+    latent_reuse: LatentReuseConfig | None = None,
 ) -> None:
     prompts = load_prompts(prompts_path)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -28,7 +29,9 @@ def run(
         f"cache_backend={config.cache_backend}",
         flush=True,
     )
-    generator = OfflineVideoGenerator(config, save_latents=save_latents)
+    generator = OfflineVideoGenerator(
+        config, save_latents=save_latents, latent_reuse=latent_reuse
+    )
     environment = collect_environment_metadata()
     for prompt in prompts:
         video_path = output_dir / f"{prompt.id}.mp4"

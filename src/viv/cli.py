@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 
 from viv.config import load_inference_config
+from viv.models import LatentReuseConfig
 from viv.prompts import resolve_prompts_path
 from viv.runner import run
 
@@ -35,8 +36,59 @@ def main(argv: list[str] | None = None) -> int:
             "(disabled by default)"
         ),
     )
+    parser.add_argument(
+        "--reuse-latents-from",
+        "--reuse-latents",
+        dest="reuse_latents_from",
+        type=Path,
+        help="Folder containing saved latent tensors to reuse",
+    )
+    parser.add_argument(
+        "--reuse-initial-latent",
+        "--reuse-initial-latents",
+        action="store_true",
+        help="Reuse the saved initial latent instead of generating initial noise",
+    )
+    parser.add_argument(
+        "--reuse-denoising-above-sigma",
+        "--reuse-denoising-sigma-threshold",
+        metavar="SIGMA",
+        type=float,
+        help="Reuse saved denoising latents while the scheduler sigma is at least SIGMA",
+    )
+    parser.add_argument(
+        "--reuse-final-latent",
+        "--reuse-final-latents",
+        action="store_true",
+        help="Decode the saved final latent directly, skipping prompt encoding and denoising",
+    )
     parser.add_argument("output_dir", type=Path, help="Output folder path")
     args = parser.parse_args(argv)
+    reuse_requested = (
+        args.reuse_initial_latent
+        or args.reuse_denoising_above_sigma is not None
+        or args.reuse_final_latent
+    )
+    if reuse_requested and args.reuse_latents_from is None:
+        parser.error("--reuse-latents-from is required when reusing latents")
+    if args.reuse_final_latent and (
+        args.reuse_initial_latent or args.reuse_denoising_above_sigma is not None
+    ):
+        parser.error("--reuse-final-latent cannot be combined with other reuse modes")
+    if (
+        args.reuse_denoising_above_sigma is not None
+        and not 0.0 <= args.reuse_denoising_above_sigma <= 1.0
+    ):
+        parser.error("--reuse-denoising-above-sigma must be between 0.0 and 1.0")
+
+    latent_reuse = None
+    if args.reuse_latents_from is not None:
+        latent_reuse = LatentReuseConfig(
+            source_dir=args.reuse_latents_from,
+            reuse_initial_latent=args.reuse_initial_latent,
+            denoising_sigma_threshold=args.reuse_denoising_above_sigma,
+            reuse_final_latent=args.reuse_final_latent,
+        )
 
     try:
         prompts_path = resolve_prompts_path(args.prompts)
@@ -47,6 +99,7 @@ def main(argv: list[str] | None = None) -> int:
             args.config.strip(),
             config,
             save_latents=args.save_latents,
+            latent_reuse=latent_reuse,
         )
     except Exception as exc:
         print(f"viv: error: {exc}", file=sys.stderr)

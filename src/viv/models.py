@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from pathlib import Path
 
 
 @dataclass(frozen=True)
@@ -29,6 +30,14 @@ class InferenceConfig:
     tensor_parallelism: int
     cache_backend: str | None
     random_seed: bool
+
+
+@dataclass(frozen=True)
+class LatentReuseConfig:
+    source_dir: Path
+    reuse_initial_latent: bool = False
+    denoising_sigma_threshold: float | None = None
+    reuse_final_latent: bool = False
 
 
 @dataclass(frozen=True)

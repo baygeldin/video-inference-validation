@@ -9,14 +9,18 @@ from typing import Any
 from viv.frames import wan_video_frames
 from viv.latent_capture import (
     LATENT_PREFIX_EXTRA_ARG,
+    REUSE_DENOISING_SIGMA_THRESHOLD_EXTRA_ARG,
+    REUSE_FINAL_LATENT_EXTRA_ARG,
+    REUSE_LATENT_PREFIX_EXTRA_ARG,
     final_noise_latent_path,
     initial_noise_latent_path,
     install_wan_latent_capture,
     latent_sha256,
+    load_latents,
     safetensors_sha256_metadata,
     save_initial_noise_latents,
 )
-from viv.models import GenerationResult, InferenceConfig, Prompt
+from viv.models import GenerationResult, InferenceConfig, LatentReuseConfig, Prompt
 
 WAN_LATENT_CHANNELS = 16
 WAN_TEMPORAL_SCALE_FACTOR = 4
@@ -34,13 +38,19 @@ def resolve_model_path(model: str, revision: str) -> str:
 
 
 class OfflineVideoGenerator:
-    def __init__(self, config: InferenceConfig, save_latents: bool = False) -> None:
+    def __init__(
+        self,
+        config: InferenceConfig,
+        save_latents: bool = False,
+        latent_reuse: LatentReuseConfig | None = None,
+    ) -> None:
         self.config = config
         self.save_latents = save_latents
+        self.latent_reuse = latent_reuse
         os.environ["DIFFUSION_ATTENTION_BACKEND"] = config.attention_backend
         model_path = resolve_model_path(config.model_name, config.model_revision)
 
-        if self.save_latents:
+        if self.save_latents or _needs_wan_latent_patch(latent_reuse):
             install_wan_latent_capture()
 
         from vllm_omni.diffusion.data import DiffusionParallelConfig
@@ -67,16 +77,41 @@ class OfflineVideoGenerator:
         if self.config.random_seed:
             print(f"using random seed {seed} for {prompt.id}", flush=True)
 
-        latents = _initial_noise_latents(self.config, seed)
+        reuse_prefix = _latent_reuse_prefix(self.latent_reuse, video_path)
+        if self.latent_reuse is not None and self.latent_reuse.reuse_final_latent:
+            latents = None
+        elif (
+            self.latent_reuse is not None
+            and self.latent_reuse.reuse_initial_latent
+            and reuse_prefix is not None
+        ):
+            latents = load_latents(initial_noise_latent_path(reuse_prefix))
+        else:
+            latents = _initial_noise_latents(self.config, seed)
+
         initial_latent_sha256 = None
         final_latent_path = None
-        if self.save_latents:
-            initial_latent_sha256 = latent_sha256(latents)
-            initial_latent_path = initial_noise_latent_path(video_path)
-            save_initial_noise_latents(
-                initial_latent_path, latents, seed, initial_latent_sha256
-            )
-            final_latent_path = final_noise_latent_path(video_path)
+        if latents is not None:
+            if (
+                self.latent_reuse is not None
+                and self.latent_reuse.reuse_initial_latent
+                and reuse_prefix is not None
+            ):
+                initial_latent_path = initial_noise_latent_path(reuse_prefix)
+                initial_latent_sha256 = safetensors_sha256_metadata(
+                    initial_latent_path
+                )
+            elif self.save_latents:
+                initial_latent_sha256 = latent_sha256(latents)
+
+            if self.save_latents:
+                save_initial_noise_latents(
+                    initial_noise_latent_path(video_path),
+                    latents,
+                    seed,
+                    initial_latent_sha256 or latent_sha256(latents),
+                )
+                final_latent_path = final_noise_latent_path(video_path)
 
         extra_args: dict[str, object] = {
             "flow_shift": self.config.flow_shift,
@@ -85,6 +120,17 @@ class OfflineVideoGenerator:
             extra_args[LATENT_PREFIX_EXTRA_ARG] = str(
                 video_path.with_suffix("").resolve()
             )
+        if reuse_prefix is not None:
+            extra_args[REUSE_LATENT_PREFIX_EXTRA_ARG] = str(reuse_prefix.resolve())
+        if (
+            self.latent_reuse is not None
+            and self.latent_reuse.denoising_sigma_threshold is not None
+        ):
+            extra_args[REUSE_DENOISING_SIGMA_THRESHOLD_EXTRA_ARG] = (
+                self.latent_reuse.denoising_sigma_threshold
+            )
+        if self.latent_reuse is not None and self.latent_reuse.reuse_final_latent:
+            extra_args[REUSE_FINAL_LATENT_EXTRA_ARG] = True
 
         sampling_params = OmniDiffusionSamplingParams(
             height=self.config.height,
@@ -109,11 +155,16 @@ class OfflineVideoGenerator:
             quality=self.config.export_quality,
         )
         tmp_path.replace(video_path)
-        final_latent_sha256 = (
-            safetensors_sha256_metadata(final_latent_path)
-            if final_latent_path is not None
-            else None
-        )
+        if self.latent_reuse is not None and self.latent_reuse.reuse_final_latent:
+            if reuse_prefix is None:
+                raise ValueError("missing latent reuse source prefix")
+            final_latent_sha256 = safetensors_sha256_metadata(
+                final_noise_latent_path(reuse_prefix)
+            )
+        elif final_latent_path is not None:
+            final_latent_sha256 = safetensors_sha256_metadata(final_latent_path)
+        else:
+            final_latent_sha256 = None
         return GenerationResult(
             seed=seed,
             duration_seconds=time.perf_counter() - started_at,
@@ -141,3 +192,18 @@ def _initial_noise_latents(config: InferenceConfig, seed: int) -> Any:
     )
     generator = torch.Generator(device="cpu").manual_seed(seed)
     return randn_tensor(shape, generator=generator, device="cpu", dtype=torch.float32)
+
+
+def _needs_wan_latent_patch(latent_reuse: LatentReuseConfig | None) -> bool:
+    return latent_reuse is not None and (
+        latent_reuse.denoising_sigma_threshold is not None
+        or latent_reuse.reuse_final_latent
+    )
+
+
+def _latent_reuse_prefix(
+    latent_reuse: LatentReuseConfig | None, video_path: Path
+) -> Path | None:
+    if latent_reuse is None:
+        return None
+    return latent_reuse.source_dir / video_path.with_suffix("").name
