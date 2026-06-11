@@ -10,7 +10,11 @@ from viv.prompts import load_prompts
 
 
 def run(
-    prompts_path: Path, output_dir: Path, config_name: str, config: InferenceConfig
+    prompts_path: Path,
+    output_dir: Path,
+    config_name: str,
+    config: InferenceConfig,
+    save_latents: bool = False,
 ) -> None:
     prompts = load_prompts(prompts_path)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -24,7 +28,7 @@ def run(
         f"cache_backend={config.cache_backend}",
         flush=True,
     )
-    generator = OfflineVideoGenerator(config)
+    generator = OfflineVideoGenerator(config, save_latents=save_latents)
     environment = collect_environment_metadata()
     for prompt in prompts:
         video_path = output_dir / f"{prompt.id}.mp4"

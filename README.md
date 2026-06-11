@@ -28,6 +28,13 @@ viv -p pilot --config cache_dit /workspace/outputs
 viv -p pilot --config int4_quantization /workspace/outputs
 ```
 
+Latent capture is disabled by default. Use `--save-latents` to also write the
+initial noise latent, final noise latent, and each denoising step latent:
+
+```bash
+viv -p pilot --save-latents /workspace/outputs
+```
+
 The script runs offline inference through vLLM-Omni and writes:
 
 ```text
@@ -44,7 +51,8 @@ The JSON sidecar records the generation parameters and runtime environment:
   "prompt_id": "pilot-0001",
   "prompt_text": "A blue car drives past a white picket fence on a sunny day",
   "seed": 420001,
-  "initial_noise_latent_sha256": "980eaf0a67d5d9de2c386cebe874d0f8dbe05103d7b76fdf49e59d02185f7807",
+  "initial_noise_latent_sha256": null,
+  "final_noise_latent_sha256": null,
   "height": 480,
   "width": 832,
   "fps": 16,

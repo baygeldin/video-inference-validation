@@ -35,8 +35,8 @@ class InferenceConfig:
 class GenerationResult:
     seed: int
     duration_seconds: float
-    initial_noise_latent_sha256: str
-    final_noise_latent_sha256: str
+    initial_noise_latent_sha256: str | None
+    final_noise_latent_sha256: str | None
 
 
 EnvironmentMetadata = Mapping[str, str | None]

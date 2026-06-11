@@ -34,12 +34,14 @@ def resolve_model_path(model: str, revision: str) -> str:
 
 
 class OfflineVideoGenerator:
-    def __init__(self, config: InferenceConfig) -> None:
+    def __init__(self, config: InferenceConfig, save_latents: bool = False) -> None:
         self.config = config
+        self.save_latents = save_latents
         os.environ["DIFFUSION_ATTENTION_BACKEND"] = config.attention_backend
         model_path = resolve_model_path(config.model_name, config.model_revision)
 
-        install_wan_latent_capture()
+        if self.save_latents:
+            install_wan_latent_capture()
 
         from vllm_omni.diffusion.data import DiffusionParallelConfig
         from vllm_omni.entrypoints.omni import Omni
@@ -66,12 +68,23 @@ class OfflineVideoGenerator:
             print(f"using random seed {seed} for {prompt.id}", flush=True)
 
         latents = _initial_noise_latents(self.config, seed)
-        initial_latent_sha256 = latent_sha256(latents)
-        initial_latent_path = initial_noise_latent_path(video_path)
-        save_initial_noise_latents(
-            initial_latent_path, latents, seed, initial_latent_sha256
-        )
-        final_latent_path = final_noise_latent_path(video_path)
+        initial_latent_sha256 = None
+        final_latent_path = None
+        if self.save_latents:
+            initial_latent_sha256 = latent_sha256(latents)
+            initial_latent_path = initial_noise_latent_path(video_path)
+            save_initial_noise_latents(
+                initial_latent_path, latents, seed, initial_latent_sha256
+            )
+            final_latent_path = final_noise_latent_path(video_path)
+
+        extra_args: dict[str, object] = {
+            "flow_shift": self.config.flow_shift,
+        }
+        if self.save_latents:
+            extra_args[LATENT_PREFIX_EXTRA_ARG] = str(
+                video_path.with_suffix("").resolve()
+            )
 
         sampling_params = OmniDiffusionSamplingParams(
             height=self.config.height,
@@ -80,10 +93,7 @@ class OfflineVideoGenerator:
             generator_device="cpu",
             latents=latents,
             boundary_ratio=self.config.boundary_ratio,
-            extra_args={
-                "flow_shift": self.config.flow_shift,
-                LATENT_PREFIX_EXTRA_ARG: str(video_path.with_suffix("").resolve()),
-            },
+            extra_args=extra_args,
             guidance_scale=self.config.guidance_scale,
             guidance_scale_2=self.config.guidance_scale_2,
             num_inference_steps=self.config.num_inference_steps,
@@ -99,7 +109,11 @@ class OfflineVideoGenerator:
             quality=self.config.export_quality,
         )
         tmp_path.replace(video_path)
-        final_latent_sha256 = safetensors_sha256_metadata(final_latent_path)
+        final_latent_sha256 = (
+            safetensors_sha256_metadata(final_latent_path)
+            if final_latent_path is not None
+            else None
+        )
         return GenerationResult(
             seed=seed,
             duration_seconds=time.perf_counter() - started_at,

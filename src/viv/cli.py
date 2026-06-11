@@ -27,13 +27,27 @@ def main(argv: list[str] | None = None) -> int:
         default="default",
         help="Inference config identifier",
     )
+    parser.add_argument(
+        "--save-latents",
+        action="store_true",
+        help=(
+            "Save initial, final, and denoising step latent tensors "
+            "(disabled by default)"
+        ),
+    )
     parser.add_argument("output_dir", type=Path, help="Output folder path")
     args = parser.parse_args(argv)
 
     try:
         prompts_path = resolve_prompts_path(args.prompts)
         config = load_inference_config(args.config)
-        run(prompts_path, args.output_dir, args.config.strip(), config)
+        run(
+            prompts_path,
+            args.output_dir,
+            args.config.strip(),
+            config,
+            save_latents=args.save_latents,
+        )
     except Exception as exc:
         print(f"viv: error: {exc}", file=sys.stderr)
         return 2
