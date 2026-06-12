@@ -179,6 +179,11 @@ class OfflineVideoGenerator:
                 final_noise_latent_path(reuse_prefix)
             )
         elif final_latent_path is not None:
+            if not final_latent_path.exists():
+                raise FileNotFoundError(
+                    "worker-side latent capture did not write expected final "
+                    f"latent: {final_latent_path}"
+                )
             final_latent_sha256 = safetensors_sha256_metadata(final_latent_path)
         else:
             final_latent_sha256 = None
