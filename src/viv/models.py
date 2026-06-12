@@ -46,6 +46,9 @@ class GenerationResult:
     duration_seconds: float
     initial_noise_latent_sha256: str | None
     final_noise_latent_sha256: str | None
+    initial_noise_latent_reused: bool = False
+    final_noise_latent_reused: bool = False
+    prediction_latents_reused: int = 0
 
 
 EnvironmentMetadata = Mapping[str, str | None]

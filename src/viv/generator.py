@@ -81,7 +81,18 @@ class OfflineVideoGenerator:
             self.latent_reuse.reuse_initial_latent
             or self.latent_reuse.reuse_predictions is not None
         )
-        if self.latent_reuse is not None and self.latent_reuse.reuse_final_latent:
+        reuse_final_latent = (
+            self.latent_reuse is not None and self.latent_reuse.reuse_final_latent
+        )
+        initial_latent_reused = reuse_initial_latent and not reuse_final_latent
+        reused_prediction_latents = (
+            self.latent_reuse.reuse_predictions
+            if not reuse_final_latent
+            and self.latent_reuse is not None
+            and self.latent_reuse.reuse_predictions is not None
+            else 0
+        )
+        if reuse_final_latent:
             latents = None
         elif reuse_initial_latent and reuse_prefix is not None:
             latents = load_latents(initial_noise_latent_path(reuse_prefix))
@@ -120,7 +131,7 @@ class OfflineVideoGenerator:
             extra_args[REUSE_PREDICTIONS_EXTRA_ARG] = (
                 self.latent_reuse.reuse_predictions
             )
-        if self.latent_reuse is not None and self.latent_reuse.reuse_final_latent:
+        if reuse_final_latent:
             extra_args[REUSE_FINAL_LATENT_EXTRA_ARG] = True
 
         sampling_params = OmniDiffusionSamplingParams(
@@ -146,7 +157,7 @@ class OfflineVideoGenerator:
             quality=self.config.export_quality,
         )
         tmp_path.replace(video_path)
-        if self.latent_reuse is not None and self.latent_reuse.reuse_final_latent:
+        if reuse_final_latent:
             if reuse_prefix is None:
                 raise ValueError("missing latent reuse source prefix")
             final_latent_sha256 = safetensors_sha256_metadata(
@@ -161,6 +172,9 @@ class OfflineVideoGenerator:
             duration_seconds=time.perf_counter() - started_at,
             initial_noise_latent_sha256=initial_latent_sha256,
             final_noise_latent_sha256=final_latent_sha256,
+            initial_noise_latent_reused=initial_latent_reused,
+            final_noise_latent_reused=reuse_final_latent,
+            prediction_latents_reused=reused_prediction_latents,
         )
 
 
