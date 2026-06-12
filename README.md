@@ -43,13 +43,13 @@ like `<id>.initial_noise_latent.safetensors`,
 
 ```bash
 viv -p pilot --reuse-latents-from /workspace/previous-outputs \
-  --reuse-initial-latent /workspace/outputs
+  --reuse-initial-latents /workspace/outputs
 
 viv -p pilot --reuse-latents-from /workspace/previous-outputs \
-  --reuse-predictions 10 /workspace/outputs
+  --reuse-prediction-latents 10 /workspace/outputs
 
 viv -p pilot --reuse-latents-from /workspace/previous-outputs \
-  --reuse-final-latent /workspace/outputs
+  --reuse-final-latents /workspace/outputs
 ```
 
 Denoising prediction reuse also starts from the saved initial latent. It reuses

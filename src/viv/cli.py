@@ -14,6 +14,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="viv",
         description="Generate Wan2.2 videos with vLLM-Omni.",
+        allow_abbrev=False,
     )
     parser.add_argument(
         "-p",
@@ -38,26 +39,26 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--reuse-latents-from",
-        "--reuse-latents",
         dest="reuse_latents_from",
         type=Path,
         help="Folder containing saved latent tensors to reuse",
     )
     parser.add_argument(
-        "--reuse-initial-latent",
         "--reuse-initial-latents",
+        dest="reuse_initial_latent",
         action="store_true",
         help="Reuse the saved initial latent instead of generating initial noise",
     )
     parser.add_argument(
-        "--reuse-predictions",
+        "--reuse-prediction-latents",
+        dest="reuse_predictions",
         metavar="COUNT",
         type=int,
         help="Reuse the first COUNT saved denoising predictions for each prompt",
     )
     parser.add_argument(
-        "--reuse-final-latent",
         "--reuse-final-latents",
+        dest="reuse_final_latent",
         action="store_true",
         help="Decode the saved final latent directly, skipping prompt encoding and denoising",
     )
@@ -73,9 +74,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.reuse_final_latent and (
         args.reuse_initial_latent or args.reuse_predictions is not None
     ):
-        parser.error("--reuse-final-latent cannot be combined with other reuse modes")
+        parser.error("--reuse-final-latents cannot be combined with other reuse modes")
     if args.reuse_predictions is not None and args.reuse_predictions < 0:
-        parser.error("--reuse-predictions must be a non-negative integer")
+        parser.error("--reuse-prediction-latents must be a non-negative integer")
 
     latent_reuse = None
     if args.reuse_latents_from is not None:

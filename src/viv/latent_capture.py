@@ -369,7 +369,7 @@ def _diffuse_with_reused_denoising(
         raise ValueError("missing latent reuse source prefix")
     if reuse_predictions > len(timesteps):
         raise ValueError(
-            f"--reuse-predictions={reuse_predictions} exceeds this run's "
+            f"--reuse-prediction-latents={reuse_predictions} exceeds this run's "
             f"{len(timesteps)} denoising steps"
         )
 
@@ -489,7 +489,7 @@ def _apply_reused_prediction_schedule(
 
     if reuse_predictions > len(source_sigmas):
         raise ValueError(
-            f"--reuse-predictions={reuse_predictions} requested, but only "
+            f"--reuse-prediction-latents={reuse_predictions} requested, but only "
             f"{len(source_sigmas)} saved denoising predictions were found"
         )
     if remaining_steps > 0 and len(source_sigmas) <= reuse_predictions:
