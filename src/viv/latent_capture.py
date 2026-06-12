@@ -13,6 +13,7 @@ LATENT_PREFIX_EXTRA_ARG = "viv_latent_prefix"
 REUSE_LATENT_PREFIX_EXTRA_ARG = "viv_reuse_latent_prefix"
 REUSE_PREDICTIONS_EXTRA_ARG = "viv_reuse_predictions"
 REUSE_FINAL_LATENT_EXTRA_ARG = "viv_reuse_final_latent"
+SIGMA_SCHEDULE_PATH_EXTRA_ARG = "viv_sigma_schedule_path"
 
 
 def install_wan_latent_capture() -> None:
@@ -30,12 +31,19 @@ def install_wan_latent_capture() -> None:
         previous_seed = getattr(self, "_viv_seed", None)
         previous_reuse_prefix = getattr(self, "_viv_reuse_latent_prefix", None)
         previous_reuse_predictions = getattr(self, "_viv_reuse_predictions", None)
+        previous_sigma_schedule_path = getattr(
+            self, "_viv_sigma_schedule_path", None
+        )
+        previous_sigma_schedule = getattr(self, "_viv_sigma_schedule", None)
         self._viv_latent_prefix = _prefix_from_request(req)
         self._viv_seed = _seed_from_request(req)
         self._viv_reuse_latent_prefix = _reuse_prefix_from_request(req)
         self._viv_reuse_predictions = _reuse_predictions_from_request(req)
+        self._viv_sigma_schedule_path = _sigma_schedule_path_from_request(req)
+        self._viv_sigma_schedule = None
         try:
             if _reuse_final_latent_from_request(req):
+                _write_sigma_schedule(self._viv_sigma_schedule_path, [])
                 return _decode_reused_final_latent(
                     self, req, _output_type_from_call(req, args, kwargs)
                 )
@@ -45,11 +53,15 @@ def install_wan_latent_capture() -> None:
             self._viv_seed = previous_seed
             self._viv_reuse_latent_prefix = previous_reuse_prefix
             self._viv_reuse_predictions = previous_reuse_predictions
+            self._viv_sigma_schedule_path = previous_sigma_schedule_path
+            self._viv_sigma_schedule = previous_sigma_schedule
 
     def diffuse(self: Any, *args: Any, **kwargs: Any) -> Any:
         previous_step_idx = getattr(self, "_viv_step_idx", None)
+        previous_sigma_schedule = getattr(self, "_viv_sigma_schedule", None)
         reuse_predictions = getattr(self, "_viv_reuse_predictions", None)
         self._viv_step_idx = 0
+        self._viv_sigma_schedule = []
         try:
             if reuse_predictions is None:
                 latents = original_diffuse(self, *args, **kwargs)
@@ -73,11 +85,16 @@ def install_wan_latent_capture() -> None:
                         "seed": getattr(self, "_viv_seed", None),
                     },
                 )
+            _write_sigma_schedule(
+                getattr(self, "_viv_sigma_schedule_path", None),
+                getattr(self, "_viv_sigma_schedule", None),
+            )
             return latents
         finally:
             if reuse_predictions is not None and hasattr(self, "_sync_pp_send"):
                 self._sync_pp_send()
             self._viv_step_idx = previous_step_idx
+            self._viv_sigma_schedule = previous_sigma_schedule
 
     def scheduler_step_maybe_with_cfg(
         self: Any,
@@ -92,6 +109,10 @@ def install_wan_latent_capture() -> None:
             self, noise_pred, t, latents, do_true_cfg, *args, **kwargs
         )
         step_idx = getattr(self, "_viv_step_idx", 0)
+        sigma = _sigma_for_step(self.scheduler, step_idx, t)
+        sigma_schedule = getattr(self, "_viv_sigma_schedule", None)
+        if sigma_schedule is not None:
+            sigma_schedule.append(sigma)
         _save_noise_pred(
             _denoising_step_latent_path_from_prefix(
                 getattr(self, "_viv_latent_prefix", None), step_idx
@@ -102,7 +123,7 @@ def install_wan_latent_capture() -> None:
                 "seed": getattr(self, "_viv_seed", None),
                 "step_idx": step_idx,
                 "timestep": _scalar_float(t),
-                "sigma": _sigma_for_step(self.scheduler, step_idx, t),
+                "sigma": sigma,
             },
         )
         self._viv_step_idx = step_idx + 1
@@ -219,6 +240,16 @@ def safetensors_sha256_metadata(latent_path: Path) -> str:
     return sha256
 
 
+def read_sigma_schedule(schedule_path: Path) -> list[float] | None:
+    if not schedule_path.exists():
+        return None
+    with schedule_path.open("r", encoding="utf-8") as fh:
+        raw_schedule = json.load(fh)
+    if not isinstance(raw_schedule, list):
+        raise ValueError(f"{schedule_path} sigma schedule must be a JSON array")
+    return [float(sigma) for sigma in raw_schedule]
+
+
 def _safetensors_metadata(latent_path: Path) -> dict[str, str]:
     from safetensors import safe_open
 
@@ -316,6 +347,15 @@ def _reuse_final_latent_from_request(req: Any) -> bool:
     sampling_params = getattr(req, "sampling_params", None)
     extra_args = getattr(sampling_params, "extra_args", None) or {}
     return _truthy(extra_args.get(REUSE_FINAL_LATENT_EXTRA_ARG))
+
+
+def _sigma_schedule_path_from_request(req: Any) -> Path | None:
+    sampling_params = getattr(req, "sampling_params", None)
+    extra_args = getattr(sampling_params, "extra_args", None) or {}
+    path = extra_args.get(SIGMA_SCHEDULE_PATH_EXTRA_ARG)
+    if path is None:
+        return None
+    return Path(path)
 
 
 def _seed_from_request(req: Any) -> int | None:
@@ -637,6 +677,22 @@ def _reset_scheduler_history(scheduler: Any) -> None:
         scheduler._step_index = None
     if hasattr(scheduler, "_begin_index"):
         scheduler._begin_index = None
+
+
+def _write_sigma_schedule(
+    schedule_path: Path | None, sigma_schedule: list[float] | None
+) -> None:
+    if schedule_path is None or sigma_schedule is None or not _is_rank_zero():
+        return
+
+    schedule_path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = schedule_path.with_name(
+        f"{schedule_path.stem}.tmp{schedule_path.suffix}"
+    )
+    with tmp_path.open("w", encoding="utf-8") as fh:
+        json.dump([float(sigma) for sigma in sigma_schedule], fh, indent=2)
+        fh.write("\n")
+    tmp_path.replace(schedule_path)
 
 
 def _decode_reused_final_latent(

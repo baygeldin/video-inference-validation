@@ -51,6 +51,7 @@ class GenerationResult:
     duration_seconds: float
     initial_noise_latent_sha256: str | None
     final_noise_latent_sha256: str | None
+    sigma_schedule: list[float] | None = None
     initial_noise_latent_reused: bool = False
     final_noise_latent_reused: bool = False
     prediction_latents_reused: int = 0

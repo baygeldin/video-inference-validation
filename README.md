@@ -67,7 +67,9 @@ The script runs offline inference through vLLM-Omni and writes:
 The JSON sidecar records the generation parameters and runtime environment:
 `generation_id` is a short random identifier for the run, and
 `reused_latents_from` records the source generation's `generation_id` when
-latents are reused from another output folder.
+latents are reused from another output folder. `sigma_schedule` records the
+actual sigma value used for each denoising step, including adjusted schedules
+created by `--reuse-prediction-latents`; it is abbreviated in this example.
 ```json
 {
   "config_name": "default",
@@ -79,6 +81,7 @@ latents are reused from another output folder.
   "seed": 420001,
   "initial_noise_latent_sha256": null,
   "final_noise_latent_sha256": null,
+  "sigma_schedule": [0.9999999403953552, 0.9933019876480103],
   "initial_noise_latent_reused": false,
   "final_noise_latent_reused": false,
   "prediction_latents_reused": 0,

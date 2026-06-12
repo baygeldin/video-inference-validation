@@ -38,6 +38,7 @@ def write_sidecar_metadata(
         "seed": result.seed,
         "initial_noise_latent_sha256": result.initial_noise_latent_sha256,
         "final_noise_latent_sha256": result.final_noise_latent_sha256,
+        "sigma_schedule": result.sigma_schedule,
         "initial_noise_latent_reused": result.initial_noise_latent_reused,
         "final_noise_latent_reused": result.final_noise_latent_reused,
         "prediction_latents_reused": result.prediction_latents_reused,

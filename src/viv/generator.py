@@ -12,10 +12,12 @@ from viv.latent_capture import (
     REUSE_FINAL_LATENT_EXTRA_ARG,
     REUSE_LATENT_PREFIX_EXTRA_ARG,
     REUSE_PREDICTIONS_EXTRA_ARG,
+    SIGMA_SCHEDULE_PATH_EXTRA_ARG,
     final_noise_latent_path,
     initial_noise_latent_path,
     install_wan_latent_capture,
     load_latents,
+    read_sigma_schedule,
     safetensors_sha256_metadata,
     save_initial_noise_latents,
 )
@@ -50,8 +52,7 @@ class OfflineVideoGenerator:
         os.environ["DIFFUSION_ATTENTION_BACKEND"] = config.attention_backend
         model_path = resolve_model_path(config.model_name, config.model_revision)
 
-        if self.save_latents or _needs_wan_latent_patch(latent_reuse):
-            install_wan_latent_capture()
+        install_wan_latent_capture()
 
         from vllm_omni.diffusion.data import DiffusionParallelConfig
         from vllm_omni.entrypoints.omni import Omni
@@ -76,6 +77,9 @@ class OfflineVideoGenerator:
         seed = secrets.randbits(63) if self.config.random_seed else prompt.seed
         if self.config.random_seed:
             print(f"using random seed {seed} for {prompt.id}", flush=True)
+
+        sigma_schedule_path = _sigma_schedule_path(video_path)
+        sigma_schedule_path.unlink(missing_ok=True)
 
         reuse_prefix = _latent_reuse_prefix(self.latent_reuse, video_path)
         reuse_initial_latent = self.latent_reuse is not None and (
@@ -123,6 +127,7 @@ class OfflineVideoGenerator:
 
         extra_args: dict[str, object] = {
             "flow_shift": self.config.flow_shift,
+            SIGMA_SCHEDULE_PATH_EXTRA_ARG: str(sigma_schedule_path.resolve()),
         }
         if self.save_latents:
             extra_args[LATENT_PREFIX_EXTRA_ARG] = str(
@@ -163,6 +168,10 @@ class OfflineVideoGenerator:
             quality=self.config.export_quality,
         )
         tmp_path.replace(video_path)
+        try:
+            sigma_schedule = read_sigma_schedule(sigma_schedule_path)
+        finally:
+            sigma_schedule_path.unlink(missing_ok=True)
         if reuse_final_latent:
             if reuse_prefix is None:
                 raise ValueError("missing latent reuse source prefix")
@@ -178,6 +187,7 @@ class OfflineVideoGenerator:
             duration_seconds=time.perf_counter() - started_at,
             initial_noise_latent_sha256=initial_latent_sha256,
             final_noise_latent_sha256=final_latent_sha256,
+            sigma_schedule=sigma_schedule,
             initial_noise_latent_reused=initial_latent_reused,
             final_noise_latent_reused=reuse_final_latent,
             prediction_latents_reused=reused_prediction_latents,
@@ -206,13 +216,6 @@ def _initial_noise_latents(config: InferenceConfig, seed: int) -> Any:
     return randn_tensor(shape, generator=generator, device="cpu", dtype=torch.float32)
 
 
-def _needs_wan_latent_patch(latent_reuse: LatentReuseConfig | None) -> bool:
-    return latent_reuse is not None and (
-        latent_reuse.reuse_predictions is not None
-        or latent_reuse.reuse_final_latent
-    )
-
-
 def _latent_reuse_prefix(
     latent_reuse: LatentReuseConfig | None, video_path: Path
 ) -> Path | None:
@@ -230,3 +233,7 @@ def _reused_latents_generation_id(
     if reuse_prefix is None or not (reuse_initial_latent or reuse_final_latent):
         return None
     return read_sidecar_generation_id(reuse_prefix.with_suffix(".json"))
+
+
+def _sigma_schedule_path(video_path: Path) -> Path:
+    return video_path.with_name(f".{video_path.stem}.sigma_schedule.json")
