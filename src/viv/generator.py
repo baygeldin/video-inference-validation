@@ -9,9 +9,9 @@ from typing import Any
 from viv.frames import wan_video_frames
 from viv.latent_capture import (
     LATENT_PREFIX_EXTRA_ARG,
-    REUSE_DENOISING_SIGMA_THRESHOLD_EXTRA_ARG,
     REUSE_FINAL_LATENT_EXTRA_ARG,
     REUSE_LATENT_PREFIX_EXTRA_ARG,
+    REUSE_PREDICTIONS_EXTRA_ARG,
     final_noise_latent_path,
     initial_noise_latent_path,
     install_wan_latent_capture,
@@ -79,7 +79,7 @@ class OfflineVideoGenerator:
         reuse_prefix = _latent_reuse_prefix(self.latent_reuse, video_path)
         reuse_initial_latent = self.latent_reuse is not None and (
             self.latent_reuse.reuse_initial_latent
-            or self.latent_reuse.denoising_sigma_threshold is not None
+            or self.latent_reuse.reuse_predictions is not None
         )
         if self.latent_reuse is not None and self.latent_reuse.reuse_final_latent:
             latents = None
@@ -115,10 +115,10 @@ class OfflineVideoGenerator:
             extra_args[REUSE_LATENT_PREFIX_EXTRA_ARG] = str(reuse_prefix.resolve())
         if (
             self.latent_reuse is not None
-            and self.latent_reuse.denoising_sigma_threshold is not None
+            and self.latent_reuse.reuse_predictions is not None
         ):
-            extra_args[REUSE_DENOISING_SIGMA_THRESHOLD_EXTRA_ARG] = (
-                self.latent_reuse.denoising_sigma_threshold
+            extra_args[REUSE_PREDICTIONS_EXTRA_ARG] = (
+                self.latent_reuse.reuse_predictions
             )
         if self.latent_reuse is not None and self.latent_reuse.reuse_final_latent:
             extra_args[REUSE_FINAL_LATENT_EXTRA_ARG] = True
@@ -187,7 +187,7 @@ def _initial_noise_latents(config: InferenceConfig, seed: int) -> Any:
 
 def _needs_wan_latent_patch(latent_reuse: LatentReuseConfig | None) -> bool:
     return latent_reuse is not None and (
-        latent_reuse.denoising_sigma_threshold is not None
+        latent_reuse.reuse_predictions is not None
         or latent_reuse.reuse_final_latent
     )
 

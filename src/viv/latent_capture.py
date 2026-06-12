@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import inspect
 import json
+import math
 import os
 from pathlib import Path
 from typing import Any
@@ -10,7 +11,7 @@ from typing import Any
 
 LATENT_PREFIX_EXTRA_ARG = "viv_latent_prefix"
 REUSE_LATENT_PREFIX_EXTRA_ARG = "viv_reuse_latent_prefix"
-REUSE_DENOISING_SIGMA_THRESHOLD_EXTRA_ARG = "viv_reuse_denoising_sigma_threshold"
+REUSE_PREDICTIONS_EXTRA_ARG = "viv_reuse_predictions"
 REUSE_FINAL_LATENT_EXTRA_ARG = "viv_reuse_final_latent"
 
 
@@ -28,15 +29,11 @@ def install_wan_latent_capture() -> None:
         previous_prefix = getattr(self, "_viv_latent_prefix", None)
         previous_seed = getattr(self, "_viv_seed", None)
         previous_reuse_prefix = getattr(self, "_viv_reuse_latent_prefix", None)
-        previous_reuse_sigma_threshold = getattr(
-            self, "_viv_reuse_denoising_sigma_threshold", None
-        )
+        previous_reuse_predictions = getattr(self, "_viv_reuse_predictions", None)
         self._viv_latent_prefix = _prefix_from_request(req)
         self._viv_seed = _seed_from_request(req)
         self._viv_reuse_latent_prefix = _reuse_prefix_from_request(req)
-        self._viv_reuse_denoising_sigma_threshold = (
-            _reuse_denoising_sigma_threshold_from_request(req)
-        )
+        self._viv_reuse_predictions = _reuse_predictions_from_request(req)
         try:
             if _reuse_final_latent_from_request(req):
                 return _decode_reused_final_latent(
@@ -47,24 +44,20 @@ def install_wan_latent_capture() -> None:
             self._viv_latent_prefix = previous_prefix
             self._viv_seed = previous_seed
             self._viv_reuse_latent_prefix = previous_reuse_prefix
-            self._viv_reuse_denoising_sigma_threshold = (
-                previous_reuse_sigma_threshold
-            )
+            self._viv_reuse_predictions = previous_reuse_predictions
 
     def diffuse(self: Any, *args: Any, **kwargs: Any) -> Any:
         previous_step_idx = getattr(self, "_viv_step_idx", None)
-        reuse_sigma_threshold = getattr(
-            self, "_viv_reuse_denoising_sigma_threshold", None
-        )
+        reuse_predictions = getattr(self, "_viv_reuse_predictions", None)
         self._viv_step_idx = 0
         try:
-            if reuse_sigma_threshold is None:
+            if reuse_predictions is None:
                 latents = original_diffuse(self, *args, **kwargs)
             else:
                 latents = _diffuse_with_reused_denoising(
                     self,
                     original_diffuse,
-                    reuse_sigma_threshold,
+                    reuse_predictions,
                     *args,
                     **kwargs,
                 )
@@ -82,7 +75,7 @@ def install_wan_latent_capture() -> None:
                 )
             return latents
         finally:
-            if reuse_sigma_threshold is not None and hasattr(self, "_sync_pp_send"):
+            if reuse_predictions is not None and hasattr(self, "_sync_pp_send"):
                 self._sync_pp_send()
             self._viv_step_idx = previous_step_idx
 
@@ -158,16 +151,28 @@ def _load_tensor(
     device: Any | None = None,
     dtype: Any | None = None,
 ) -> Any:
-    from safetensors.torch import load_file
+    tensor, _ = _load_tensor_with_metadata(
+        tensor_path, key, device=device, dtype=dtype
+    )
+    return tensor
 
-    tensors = load_file(str(tensor_path), device="cpu")
-    try:
-        tensor = tensors[key]
-    except KeyError as exc:
-        raise ValueError(f"{tensor_path} does not contain a {key} tensor") from exc
+
+def _load_tensor_with_metadata(
+    tensor_path: Path,
+    key: str,
+    device: Any | None = None,
+    dtype: Any | None = None,
+) -> tuple[Any, dict[str, str]]:
+    from safetensors import safe_open
+
+    with safe_open(str(tensor_path), framework="pt", device="cpu") as tensors:
+        if key not in tensors.keys():
+            raise ValueError(f"{tensor_path} does not contain a {key} tensor")
+        tensor = tensors.get_tensor(key)
+        metadata = dict(tensors.metadata() or {})
     if device is not None or dtype is not None:
         tensor = tensor.to(device=device, dtype=dtype)
-    return tensor
+    return tensor, metadata
 
 
 def latent_sha256(tensor: Any) -> str:
@@ -207,14 +212,19 @@ def save_initial_noise_latents(
 
 
 def safetensors_sha256_metadata(latent_path: Path) -> str:
-    from safetensors import safe_open
-
-    with safe_open(str(latent_path), framework="pt", device="cpu") as tensors:
-        metadata = tensors.metadata() or {}
+    metadata = _safetensors_metadata(latent_path)
     sha256 = metadata.get("sha256")
     if not sha256:
         raise ValueError(f"{latent_path} does not contain sha256 metadata")
     return sha256
+
+
+def _safetensors_metadata(latent_path: Path) -> dict[str, str]:
+    from safetensors import safe_open
+
+    with safe_open(str(latent_path), framework="pt", device="cpu") as tensors:
+        metadata = tensors.metadata() or {}
+    return dict(metadata)
 
 
 def _save_latents(
@@ -293,13 +303,13 @@ def _reuse_prefix_from_request(req: Any) -> Path | None:
     return Path(prefix)
 
 
-def _reuse_denoising_sigma_threshold_from_request(req: Any) -> float | None:
+def _reuse_predictions_from_request(req: Any) -> int | None:
     sampling_params = getattr(req, "sampling_params", None)
     extra_args = getattr(sampling_params, "extra_args", None) or {}
-    threshold = extra_args.get(REUSE_DENOISING_SIGMA_THRESHOLD_EXTRA_ARG)
-    if threshold is None:
+    count = extra_args.get(REUSE_PREDICTIONS_EXTRA_ARG)
+    if count is None:
         return None
-    return float(threshold)
+    return int(count)
 
 
 def _reuse_final_latent_from_request(req: Any) -> bool:
@@ -330,7 +340,7 @@ def _denoising_step_latent_path_from_prefix(
 def _diffuse_with_reused_denoising(
     self: Any,
     original_diffuse: Any,
-    sigma_threshold: float,
+    reuse_predictions: int,
     *args: Any,
     **kwargs: Any,
 ) -> Any:
@@ -357,15 +367,25 @@ def _diffuse_with_reused_denoising(
     reuse_prefix = getattr(self, "_viv_reuse_latent_prefix", None)
     if reuse_prefix is None:
         raise ValueError("missing latent reuse source prefix")
+    if reuse_predictions > len(timesteps):
+        raise ValueError(
+            f"--reuse-predictions={reuse_predictions} exceeds this run's "
+            f"{len(timesteps)} denoising steps"
+        )
 
-    resumed_scheduler = False
+    timesteps = _apply_reused_prediction_schedule(
+        self.scheduler,
+        timesteps,
+        reuse_prefix,
+        reuse_predictions,
+    )
+
     with self.progress_bar(total=len(timesteps)) as pbar:
         for step_idx, t in enumerate(timesteps):
             self._current_timestep = t
             set_forward_context_denoise_step_idx(step_idx)
 
-            sigma = _sigma_for_step(self.scheduler, step_idx, t)
-            if sigma >= sigma_threshold:
+            if step_idx < reuse_predictions:
                 latent_path = _denoising_step_latent_path_from_prefix(
                     reuse_prefix, step_idx
                 )
@@ -377,11 +397,6 @@ def _diffuse_with_reused_denoising(
                 )
                 pbar.update()
                 continue
-
-            if not resumed_scheduler:
-                if step_idx > 0 and getattr(self.scheduler, "step_index", None) is None:
-                    _reset_scheduler_to_step(self.scheduler, step_idx)
-                resumed_scheduler = True
 
             if boundary_timestep is not None and t < boundary_timestep:
                 current_guidance_scale = guidance_high
@@ -460,6 +475,170 @@ def _diffuse_with_reused_denoising(
     return latents
 
 
+def _apply_reused_prediction_schedule(
+    scheduler: Any,
+    timesteps: Any,
+    reuse_prefix: Path,
+    reuse_predictions: int,
+) -> Any:
+    import torch
+
+    source_sigmas, source_timesteps = _load_saved_denoising_schedule(reuse_prefix)
+    target_steps = len(timesteps)
+    remaining_steps = target_steps - reuse_predictions
+
+    if reuse_predictions > len(source_sigmas):
+        raise ValueError(
+            f"--reuse-predictions={reuse_predictions} requested, but only "
+            f"{len(source_sigmas)} saved denoising predictions were found"
+        )
+    if remaining_steps > 0 and len(source_sigmas) <= reuse_predictions:
+        raise ValueError(
+            "cannot build the remaining denoising schedule: expected at least "
+            f"{reuse_predictions + 1} saved prediction sigmas, found "
+            f"{len(source_sigmas)}"
+        )
+
+    num_train_timesteps = _num_train_timesteps(scheduler)
+    sigmas = list(source_sigmas[:reuse_predictions])
+    adjusted_timesteps = [
+        source_timesteps[idx]
+        if source_timesteps[idx] is not None
+        else source_sigmas[idx] * num_train_timesteps
+        for idx in range(reuse_predictions)
+    ]
+
+    if remaining_steps > 0:
+        tail_sigmas = _lambda_spaced_tail_sigmas(
+            source_sigmas[reuse_predictions],
+            source_sigmas[-1],
+            remaining_steps,
+        )
+        sigmas.extend(tail_sigmas)
+        adjusted_timesteps.extend(
+            sigma * num_train_timesteps for sigma in tail_sigmas
+        )
+
+    if len(sigmas) != target_steps:
+        raise AssertionError("internal error while building denoising schedule")
+
+    final_sigma = _final_scheduler_sigma(scheduler)
+    device = getattr(timesteps, "device", None)
+    scheduler.sigmas = torch.tensor(
+        [*sigmas, final_sigma], dtype=torch.float32, device="cpu"
+    )
+    scheduler.timesteps = torch.tensor(
+        adjusted_timesteps, dtype=torch.float32, device=device
+    )
+    scheduler.num_inference_steps = len(adjusted_timesteps)
+    _reset_scheduler_history(scheduler)
+    return scheduler.timesteps
+
+
+def _load_saved_denoising_schedule(
+    reuse_prefix: Path,
+) -> tuple[list[float], list[float | None]]:
+    sigmas: list[float] = []
+    timesteps: list[float | None] = []
+    step_idx = 0
+    while True:
+        latent_path = _denoising_step_latent_path_from_prefix(reuse_prefix, step_idx)
+        if latent_path is None or not latent_path.exists():
+            break
+        metadata = _safetensors_metadata(latent_path)
+        sigmas.append(_required_metadata_float(latent_path, metadata, "sigma"))
+        timesteps.append(_optional_metadata_float(metadata, "timestep"))
+        step_idx += 1
+
+    if not sigmas:
+        raise ValueError(f"no saved denoising predictions found for {reuse_prefix}")
+    return sigmas, timesteps
+
+
+def _lambda_spaced_tail_sigmas(
+    start_sigma: float,
+    end_sigma: float,
+    count: int,
+) -> list[float]:
+    if count <= 0:
+        return []
+    if count == 1:
+        return [start_sigma]
+
+    lambda_start = _sigma_to_lambda(start_sigma)
+    lambda_end = _sigma_to_lambda(end_sigma)
+    return [
+        _lambda_to_sigma(
+            lambda_start + (lambda_end - lambda_start) * idx / (count - 1)
+        )
+        for idx in range(count)
+    ]
+
+
+def _sigma_to_lambda(sigma: float) -> float:
+    sigma = min(max(float(sigma), 1e-12), 1.0 - 1e-12)
+    return math.log((1.0 - sigma) / sigma)
+
+
+def _lambda_to_sigma(lambda_value: float) -> float:
+    if lambda_value >= 0:
+        exp_neg = math.exp(-lambda_value)
+        return exp_neg / (1.0 + exp_neg)
+    return 1.0 / (1.0 + math.exp(lambda_value))
+
+
+def _required_metadata_float(
+    latent_path: Path,
+    metadata: dict[str, str],
+    key: str,
+) -> float:
+    value = metadata.get(key)
+    if value is None:
+        raise ValueError(f"{latent_path} does not contain {key} metadata")
+    return float(value)
+
+
+def _optional_metadata_float(metadata: dict[str, str], key: str) -> float | None:
+    value = metadata.get(key)
+    return None if value is None else float(value)
+
+
+def _num_train_timesteps(scheduler: Any) -> float:
+    return float(
+        getattr(
+            getattr(scheduler, "config", None),
+            "num_train_timesteps",
+            getattr(scheduler, "num_train_timesteps", 1000),
+        )
+    )
+
+
+def _final_scheduler_sigma(scheduler: Any) -> float:
+    final_sigmas_type = getattr(
+        getattr(scheduler, "config", None), "final_sigmas_type", "zero"
+    )
+    if final_sigmas_type == "sigma_min":
+        return float(getattr(scheduler, "sigma_min", 0.0))
+    return 0.0
+
+
+def _reset_scheduler_history(scheduler: Any) -> None:
+    if hasattr(scheduler, "model_outputs"):
+        scheduler.model_outputs = [None] * len(scheduler.model_outputs)
+    if hasattr(scheduler, "timestep_list"):
+        scheduler.timestep_list = [None] * len(scheduler.timestep_list)
+    if hasattr(scheduler, "lower_order_nums"):
+        scheduler.lower_order_nums = 0
+    if hasattr(scheduler, "last_sample"):
+        scheduler.last_sample = None
+    if hasattr(scheduler, "this_order"):
+        scheduler.this_order = 1
+    if hasattr(scheduler, "_step_index"):
+        scheduler._step_index = None
+    if hasattr(scheduler, "_begin_index"):
+        scheduler._begin_index = None
+
+
 def _decode_reused_final_latent(
     self: Any, req: Any, output_type: str | None
 ) -> Any:
@@ -522,23 +701,6 @@ def _sigma_for_step(scheduler: Any, step_idx: int, timestep: Any) -> float:
         getattr(scheduler, "num_train_timesteps", 1000),
     )
     return _scalar_float(timestep) / float(num_train_timesteps)
-
-
-def _reset_scheduler_to_step(scheduler: Any, step_idx: int) -> None:
-    if hasattr(scheduler, "model_outputs"):
-        scheduler.model_outputs = [None] * len(scheduler.model_outputs)
-    if hasattr(scheduler, "timestep_list"):
-        scheduler.timestep_list = [None] * len(scheduler.timestep_list)
-    if hasattr(scheduler, "lower_order_nums"):
-        scheduler.lower_order_nums = 0
-    if hasattr(scheduler, "last_sample"):
-        scheduler.last_sample = None
-    if hasattr(scheduler, "this_order"):
-        scheduler.this_order = 1
-    if hasattr(scheduler, "set_begin_index"):
-        scheduler.set_begin_index(step_idx)
-    elif hasattr(scheduler, "_step_index"):
-        scheduler._step_index = step_idx
 
 
 def _truthy(value: Any) -> bool:

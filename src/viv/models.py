@@ -36,7 +36,7 @@ class InferenceConfig:
 class LatentReuseConfig:
     source_dir: Path
     reuse_initial_latent: bool = False
-    denoising_sigma_threshold: float | None = None
+    reuse_predictions: int | None = None
     reuse_final_latent: bool = False
 
 

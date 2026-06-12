@@ -46,14 +46,16 @@ viv -p pilot --reuse-latents-from /workspace/previous-outputs \
   --reuse-initial-latent /workspace/outputs
 
 viv -p pilot --reuse-latents-from /workspace/previous-outputs \
-  --reuse-denoising-above-sigma 0.55 /workspace/outputs
+  --reuse-predictions 10 /workspace/outputs
 
 viv -p pilot --reuse-latents-from /workspace/previous-outputs \
   --reuse-final-latent /workspace/outputs
 ```
 
-Denoising reuse also starts from the saved initial latent so the scheduler can
-replay its internal state from the saved model predictions before continuing.
+Denoising prediction reuse also starts from the saved initial latent. It reuses
+the first `COUNT` saved model predictions and their original sigmas, then
+compresses the remaining saved sigma trajectory into the new run's remaining
+steps with equal spacing in UniPC lambda space.
 
 The script runs offline inference through vLLM-Omni and writes:
 

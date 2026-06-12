@@ -50,11 +50,10 @@ def main(argv: list[str] | None = None) -> int:
         help="Reuse the saved initial latent instead of generating initial noise",
     )
     parser.add_argument(
-        "--reuse-denoising-above-sigma",
-        "--reuse-denoising-sigma-threshold",
-        metavar="SIGMA",
-        type=float,
-        help="Reuse saved denoising latents while the scheduler sigma is at least SIGMA",
+        "--reuse-predictions",
+        metavar="COUNT",
+        type=int,
+        help="Reuse the first COUNT saved denoising predictions for each prompt",
     )
     parser.add_argument(
         "--reuse-final-latent",
@@ -66,27 +65,24 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     reuse_requested = (
         args.reuse_initial_latent
-        or args.reuse_denoising_above_sigma is not None
+        or args.reuse_predictions is not None
         or args.reuse_final_latent
     )
     if reuse_requested and args.reuse_latents_from is None:
         parser.error("--reuse-latents-from is required when reusing latents")
     if args.reuse_final_latent and (
-        args.reuse_initial_latent or args.reuse_denoising_above_sigma is not None
+        args.reuse_initial_latent or args.reuse_predictions is not None
     ):
         parser.error("--reuse-final-latent cannot be combined with other reuse modes")
-    if (
-        args.reuse_denoising_above_sigma is not None
-        and not 0.0 <= args.reuse_denoising_above_sigma <= 1.0
-    ):
-        parser.error("--reuse-denoising-above-sigma must be between 0.0 and 1.0")
+    if args.reuse_predictions is not None and args.reuse_predictions < 0:
+        parser.error("--reuse-predictions must be a non-negative integer")
 
     latent_reuse = None
     if args.reuse_latents_from is not None:
         latent_reuse = LatentReuseConfig(
             source_dir=args.reuse_latents_from,
             reuse_initial_latent=args.reuse_initial_latent,
-            denoising_sigma_threshold=args.reuse_denoising_above_sigma,
+            reuse_predictions=args.reuse_predictions,
             reuse_final_latent=args.reuse_final_latent,
         )
 
