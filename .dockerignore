@@ -7,3 +7,6 @@ __pycache__/
 *.py[cod]
 
 tmp/
+
+runpod_sync
+runpod_sync.pub

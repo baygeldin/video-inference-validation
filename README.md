@@ -112,3 +112,23 @@ created by `--reuse-prediction-latents`; it is abbreviated in this example.
   }
 }
 ```
+
+## Syncing data between pods
+- Generate a key pair for syncing files between pods via `ssh-keygen -t ed25519 -f runpod_sync -N ""`.
+- Add the `runpod_sync` private key as `SYNC_PRIVATE_KEY` on RunPod.
+
+Every pod with that environment variable can pull `/workspace/` from any other
+pod running the same image. From the destination pod, run:
+
+```bash
+runpod-sync <source-ssh-host> <source-ssh-port>
+```
+
+This copies the source pod's `/workspace/` into the current pod's `/workspace/`.
+Use `--dry-run` to preview changes, and add `--delete` only when the destination
+should exactly match the source:
+
+```bash
+runpod-sync <source-ssh-host> <source-ssh-port> --dry-run
+runpod-sync <source-ssh-host> <source-ssh-port> --delete
+```
