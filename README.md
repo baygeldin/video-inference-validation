@@ -125,8 +125,9 @@ runpod-sync <source-ssh-host> <source-ssh-port>
 ```
 
 This copies the source pod's `/workspace/` into the current pod's `/workspace/`.
-Use `--dry-run` to preview changes, and add `--delete` only when the destination
-should exactly match the source:
+Top-level hidden files and folders in `/workspace`, such as `.cache`, are
+ignored. Use `--dry-run` to preview changes, and add `--delete` only when the
+destination should exactly match the source:
 
 ```bash
 runpod-sync <source-ssh-host> <source-ssh-port> --dry-run

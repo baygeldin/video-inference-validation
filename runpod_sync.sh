@@ -83,6 +83,7 @@ rsync_args=(
     -aH
     --partial
     --info=progress2
+    --exclude='/.?*'
 )
 
 if [[ "${dry_run}" -eq 1 ]]; then
