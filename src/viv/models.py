@@ -1,8 +1,13 @@
 from __future__ import annotations
 
+import secrets
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
+
+
+def _new_generation_id() -> str:
+    return secrets.token_urlsafe(6)
 
 
 @dataclass(frozen=True)
@@ -49,6 +54,8 @@ class GenerationResult:
     initial_noise_latent_reused: bool = False
     final_noise_latent_reused: bool = False
     prediction_latents_reused: int = 0
+    generation_id: str = field(default_factory=_new_generation_id)
+    reused_latents_from: str | None = None
 
 
 EnvironmentMetadata = Mapping[str, str | None]

@@ -19,6 +19,7 @@ from viv.latent_capture import (
     safetensors_sha256_metadata,
     save_initial_noise_latents,
 )
+from viv.metadata import read_sidecar_generation_id
 from viv.models import GenerationResult, InferenceConfig, LatentReuseConfig, Prompt
 
 WAN_LATENT_CHANNELS = 16
@@ -98,6 +99,11 @@ class OfflineVideoGenerator:
             latents = load_latents(initial_noise_latent_path(reuse_prefix))
         else:
             latents = _initial_noise_latents(self.config, seed)
+        reused_latents_from = _reused_latents_generation_id(
+            reuse_prefix,
+            reuse_initial_latent=reuse_initial_latent,
+            reuse_final_latent=reuse_final_latent,
+        )
 
         initial_latent_sha256 = None
         final_latent_path = None
@@ -175,6 +181,7 @@ class OfflineVideoGenerator:
             initial_noise_latent_reused=initial_latent_reused,
             final_noise_latent_reused=reuse_final_latent,
             prediction_latents_reused=reused_prediction_latents,
+            reused_latents_from=reused_latents_from,
         )
 
 
@@ -212,3 +219,14 @@ def _latent_reuse_prefix(
     if latent_reuse is None:
         return None
     return latent_reuse.source_dir / video_path.with_suffix("").name
+
+
+def _reused_latents_generation_id(
+    reuse_prefix: Path | None,
+    *,
+    reuse_initial_latent: bool,
+    reuse_final_latent: bool,
+) -> str | None:
+    if reuse_prefix is None or not (reuse_initial_latent or reuse_final_latent):
+        return None
+    return read_sidecar_generation_id(reuse_prefix.with_suffix(".json"))

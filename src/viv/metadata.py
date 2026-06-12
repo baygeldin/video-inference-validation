@@ -7,6 +7,19 @@ from pathlib import Path
 from viv.models import EnvironmentMetadata, GenerationResult, InferenceConfig, Prompt
 
 
+def read_sidecar_generation_id(metadata_path: Path) -> str | None:
+    if not metadata_path.exists():
+        return None
+    with metadata_path.open("r", encoding="utf-8") as fh:
+        metadata = json.load(fh)
+    generation_id = metadata.get("generation_id")
+    if generation_id is None:
+        return None
+    if not isinstance(generation_id, str):
+        raise ValueError(f"{metadata_path} generation_id must be a string")
+    return generation_id
+
+
 def write_sidecar_metadata(
     metadata_path: Path,
     config_name: str,
@@ -17,6 +30,7 @@ def write_sidecar_metadata(
 ) -> None:
     metadata = {
         "config_name": config_name,
+        "generation_id": result.generation_id,
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "duration_seconds": result.duration_seconds,
         "prompt_id": prompt.id,
@@ -27,6 +41,7 @@ def write_sidecar_metadata(
         "initial_noise_latent_reused": result.initial_noise_latent_reused,
         "final_noise_latent_reused": result.final_noise_latent_reused,
         "prediction_latents_reused": result.prediction_latents_reused,
+        "reused_latents_from": result.reused_latents_from,
         "height": config.height,
         "width": config.width,
         "fps": config.fps,

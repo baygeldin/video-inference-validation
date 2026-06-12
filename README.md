@@ -65,9 +65,13 @@ The script runs offline inference through vLLM-Omni and writes:
 ```
 
 The JSON sidecar records the generation parameters and runtime environment:
+`generation_id` is a short random identifier for the run, and
+`reused_latents_from` records the source generation's `generation_id` when
+latents are reused from another output folder.
 ```json
 {
   "config_name": "default",
+  "generation_id": "PrDYmJfK",
   "timestamp": "2026-06-02T11:36:05.916536+00:00",
   "duration_seconds": 415.33602340100333,
   "prompt_id": "pilot-0001",
@@ -78,6 +82,7 @@ The JSON sidecar records the generation parameters and runtime environment:
   "initial_noise_latent_reused": false,
   "final_noise_latent_reused": false,
   "prediction_latents_reused": 0,
+  "reused_latents_from": null,
   "height": 480,
   "width": 832,
   "fps": 16,
