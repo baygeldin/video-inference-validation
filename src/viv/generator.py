@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import hashlib
-import json
 import os
 import secrets
 import time
@@ -9,7 +7,22 @@ from pathlib import Path
 from typing import Any
 
 from viv.frames import wan_video_frames
-from viv.models import GenerationResult, InferenceConfig, Prompt
+from viv.latent_capture import (
+    LATENT_PREFIX_EXTRA_ARG,
+    REUSE_FINAL_LATENT_EXTRA_ARG,
+    REUSE_LATENT_PREFIX_EXTRA_ARG,
+    REUSE_PREDICTIONS_EXTRA_ARG,
+    SIGMA_SCHEDULE_PATH_EXTRA_ARG,
+    final_noise_latent_path,
+    initial_noise_latent_path,
+    install_wan_latent_capture,
+    load_latents,
+    read_sigma_schedule,
+    safetensors_sha256_metadata,
+    save_initial_noise_latents,
+)
+from viv.metadata import read_sidecar_generation_id
+from viv.models import GenerationResult, InferenceConfig, LatentReuseConfig, Prompt
 
 WAN_LATENT_CHANNELS = 16
 WAN_TEMPORAL_SCALE_FACTOR = 4
@@ -27,10 +40,19 @@ def resolve_model_path(model: str, revision: str) -> str:
 
 
 class OfflineVideoGenerator:
-    def __init__(self, config: InferenceConfig) -> None:
+    def __init__(
+        self,
+        config: InferenceConfig,
+        save_latents: bool = False,
+        latent_reuse: LatentReuseConfig | None = None,
+    ) -> None:
         self.config = config
+        self.save_latents = save_latents
+        self.latent_reuse = latent_reuse
         os.environ["DIFFUSION_ATTENTION_BACKEND"] = config.attention_backend
         model_path = resolve_model_path(config.model_name, config.model_revision)
+
+        install_wan_latent_capture()
 
         from vllm_omni.diffusion.data import DiffusionParallelConfig
         from vllm_omni.entrypoints.omni import Omni
@@ -56,10 +78,72 @@ class OfflineVideoGenerator:
         if self.config.random_seed:
             print(f"using random seed {seed} for {prompt.id}", flush=True)
 
-        latents = _initial_noise_latents(self.config, seed)
-        latent_sha256 = _latent_sha256(latents)
-        latent_path = _initial_noise_latent_path(video_path)
-        _save_initial_noise_latents(latent_path, latents, seed, latent_sha256)
+        sigma_schedule_path = _sigma_schedule_path(video_path)
+        sigma_schedule_path.unlink(missing_ok=True)
+
+        reuse_prefix = _latent_reuse_prefix(self.latent_reuse, video_path)
+        reuse_initial_latent = self.latent_reuse is not None and (
+            self.latent_reuse.reuse_initial_latent
+            or self.latent_reuse.reuse_predictions is not None
+        )
+        reuse_final_latent = (
+            self.latent_reuse is not None and self.latent_reuse.reuse_final_latent
+        )
+        initial_latent_reused = reuse_initial_latent and not reuse_final_latent
+        reused_prediction_latents = (
+            self.latent_reuse.reuse_predictions
+            if not reuse_final_latent
+            and self.latent_reuse is not None
+            and self.latent_reuse.reuse_predictions is not None
+            else 0
+        )
+        if reuse_final_latent:
+            latents = None
+        elif reuse_initial_latent and reuse_prefix is not None:
+            latents = load_latents(initial_noise_latent_path(reuse_prefix))
+        else:
+            latents = _initial_noise_latents(self.config, seed)
+        reused_latents_from = _reused_latents_generation_id(
+            reuse_prefix,
+            reuse_initial_latent=reuse_initial_latent,
+            reuse_final_latent=reuse_final_latent,
+        )
+
+        initial_latent_sha256 = None
+        final_latent_path = None
+        if latents is not None:
+            if reuse_initial_latent and reuse_prefix is not None:
+                initial_latent_path = initial_noise_latent_path(reuse_prefix)
+                initial_latent_sha256 = safetensors_sha256_metadata(
+                    initial_latent_path
+                )
+            if self.save_latents:
+                initial_latent_sha256 = save_initial_noise_latents(
+                    initial_noise_latent_path(video_path),
+                    latents,
+                    seed,
+                ) or initial_latent_sha256
+                final_latent_path = final_noise_latent_path(video_path)
+
+        extra_args: dict[str, object] = {
+            "flow_shift": self.config.flow_shift,
+            SIGMA_SCHEDULE_PATH_EXTRA_ARG: str(sigma_schedule_path.resolve()),
+        }
+        if self.save_latents:
+            extra_args[LATENT_PREFIX_EXTRA_ARG] = str(
+                video_path.with_suffix("").resolve()
+            )
+        if reuse_prefix is not None:
+            extra_args[REUSE_LATENT_PREFIX_EXTRA_ARG] = str(reuse_prefix.resolve())
+        if (
+            self.latent_reuse is not None
+            and self.latent_reuse.reuse_predictions is not None
+        ):
+            extra_args[REUSE_PREDICTIONS_EXTRA_ARG] = (
+                self.latent_reuse.reuse_predictions
+            )
+        if reuse_final_latent:
+            extra_args[REUSE_FINAL_LATENT_EXTRA_ARG] = True
 
         sampling_params = OmniDiffusionSamplingParams(
             height=self.config.height,
@@ -68,7 +152,7 @@ class OfflineVideoGenerator:
             generator_device="cpu",
             latents=latents,
             boundary_ratio=self.config.boundary_ratio,
-            extra_args={"flow_shift": self.config.flow_shift},
+            extra_args=extra_args,
             guidance_scale=self.config.guidance_scale,
             guidance_scale_2=self.config.guidance_scale_2,
             num_inference_steps=self.config.num_inference_steps,
@@ -84,15 +168,36 @@ class OfflineVideoGenerator:
             quality=self.config.export_quality,
         )
         tmp_path.replace(video_path)
+        try:
+            sigma_schedule = read_sigma_schedule(sigma_schedule_path)
+        finally:
+            sigma_schedule_path.unlink(missing_ok=True)
+        if reuse_final_latent:
+            if reuse_prefix is None:
+                raise ValueError("missing latent reuse source prefix")
+            final_latent_sha256 = safetensors_sha256_metadata(
+                final_noise_latent_path(reuse_prefix)
+            )
+        elif final_latent_path is not None:
+            if not final_latent_path.exists():
+                raise FileNotFoundError(
+                    "worker-side latent capture did not write expected final "
+                    f"latent: {final_latent_path}"
+                )
+            final_latent_sha256 = safetensors_sha256_metadata(final_latent_path)
+        else:
+            final_latent_sha256 = None
         return GenerationResult(
             seed=seed,
             duration_seconds=time.perf_counter() - started_at,
-            initial_noise_latent_sha256=latent_sha256,
+            initial_noise_latent_sha256=initial_latent_sha256,
+            final_noise_latent_sha256=final_latent_sha256,
+            sigma_schedule=sigma_schedule,
+            initial_noise_latent_reused=initial_latent_reused,
+            final_noise_latent_reused=reuse_final_latent,
+            prediction_latents_reused=reused_prediction_latents,
+            reused_latents_from=reused_latents_from,
         )
-
-
-def _initial_noise_latent_path(video_path: Path) -> Path:
-    return video_path.with_name(f"{video_path.stem}.initial_noise_latent.safetensors")
 
 
 def _initial_noise_latents(config: InferenceConfig, seed: int) -> Any:
@@ -116,39 +221,24 @@ def _initial_noise_latents(config: InferenceConfig, seed: int) -> Any:
     return randn_tensor(shape, generator=generator, device="cpu", dtype=torch.float32)
 
 
-def _latent_sha256(tensor: Any) -> str:
-    import torch
-
-    if not isinstance(tensor, torch.Tensor):
-        raise TypeError(f"expected torch.Tensor, got {type(tensor).__name__}")
-
-    metadata = {
-        "dtype": str(tensor.dtype).removeprefix("torch."),
-        "shape": list(tensor.shape),
-    }
-    metadata_bytes = json.dumps(metadata, sort_keys=True, separators=(",", ":")).encode(
-        "utf-8"
-    )
-    array = tensor.detach().cpu().contiguous().numpy()
-    digest = hashlib.sha256()
-    digest.update(metadata_bytes)
-    digest.update(b"\0")
-    digest.update(array.tobytes(order="C"))
-    return digest.hexdigest()
+def _latent_reuse_prefix(
+    latent_reuse: LatentReuseConfig | None, video_path: Path
+) -> Path | None:
+    if latent_reuse is None:
+        return None
+    return latent_reuse.source_dir / video_path.with_suffix("").name
 
 
-def _save_initial_noise_latents(
-    latent_path: Path, latents: Any, seed: int, latent_sha256: str
-) -> None:
-    from safetensors.torch import save_file
+def _reused_latents_generation_id(
+    reuse_prefix: Path | None,
+    *,
+    reuse_initial_latent: bool,
+    reuse_final_latent: bool,
+) -> str | None:
+    if reuse_prefix is None or not (reuse_initial_latent or reuse_final_latent):
+        return None
+    return read_sidecar_generation_id(reuse_prefix.with_suffix(".json"))
 
-    tmp_path = latent_path.with_name(f"{latent_path.stem}.tmp{latent_path.suffix}")
-    save_file(
-        {"latents": latents.detach().cpu().contiguous()},
-        str(tmp_path),
-        metadata={
-            "seed": str(seed),
-            "sha256": latent_sha256,
-        },
-    )
-    tmp_path.replace(latent_path)
+
+def _sigma_schedule_path(video_path: Path) -> Path:
+    return video_path.with_name(f".{video_path.stem}.sigma_schedule.json")

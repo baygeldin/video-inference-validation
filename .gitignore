@@ -11,6 +11,10 @@ tmp/
 # Devcontainer
 .devcontainer/.env
 
+# Secrets
+runpod_sync
+runpod_sync.pub
+
 
 ### Default Python gitignore template:
 

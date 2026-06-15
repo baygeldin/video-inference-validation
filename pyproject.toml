@@ -17,6 +17,9 @@ dependencies = [
 [project.scripts]
 viv = "viv.cli:main"
 
+[project.entry-points."vllm_omni.general_plugins"]
+viv_latent_capture = "viv.latent_capture:install_wan_latent_capture"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

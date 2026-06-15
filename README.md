@@ -1,7 +1,6 @@
 # Video Inference Validation
 
-This repository contains a harness for running inference validation experiments for video models, specifically Wan2.2-T2V-A14B.
-The experiment is described in more detail here: https://github.com/gonka-ai/gonka/discussions/1155#discussioncomment-16976435
+This repository contains a harness for running inference validation experiments for video models, specifically Wan2.2-T2V-A14B. More details: https://github.com/gonka-ai/gonka/discussions/1155#discussioncomment-16976435
 
 ## Structure
 - `prompts/` contains the built-in prompt datasets
@@ -28,8 +27,31 @@ viv -p pilot --config cache_dit /workspace/outputs
 viv -p pilot --config int4_quantization /workspace/outputs
 ```
 
-The script runs offline inference through vLLM-Omni and writes:
+Latent capture is disabled by default. Use `--save-latents` to also write the initial noise latent, final noise latent, and each denoising step model prediction:
 
+```bash
+viv -p pilot --save-latents /workspace/outputs
+```
+
+Saved tensors can be reused by pointing at the folder that contains files named
+like `<id>.initial_noise_latent.safetensors`,
+`<id>.denoising_step_0.safetensors`, and
+`<id>.final_noise_latent.safetensors`:
+
+```bash
+viv -p pilot --reuse-latents-from /workspace/previous-outputs \
+  --reuse-initial-latents /workspace/outputs
+
+viv -p pilot --reuse-latents-from /workspace/previous-outputs \
+  --reuse-prediction-latents 10 /workspace/outputs
+
+viv -p pilot --reuse-latents-from /workspace/previous-outputs \
+  --reuse-final-latents /workspace/outputs
+```
+
+If `--reuse-prediction-latents` is specified, then `--reuse-initial-latents` is enabled by default (because it makes no sense to reuse predictions without sharing the initial noise latent). It reuses the first `COUNT` saved model predictions and their original sigmas, then compresses the remaining saved sigma trajectory into the new run's remaining steps with equal spacing in UniPC lambda space.
+
+The script runs offline inference through vLLM-Omni and writes:
 ```text
 /workspace/outputs/<id>.mp4
 /workspace/outputs/<id>.json
@@ -39,12 +61,19 @@ The JSON sidecar records the generation parameters and runtime environment:
 ```json
 {
   "config_name": "default",
+  "generation_id": "PrDYmJfK",
   "timestamp": "2026-06-02T11:36:05.916536+00:00",
   "duration_seconds": 415.33602340100333,
   "prompt_id": "pilot-0001",
   "prompt_text": "A blue car drives past a white picket fence on a sunny day",
   "seed": 420001,
-  "initial_noise_latent_sha256": "980eaf0a67d5d9de2c386cebe874d0f8dbe05103d7b76fdf49e59d02185f7807",
+  "initial_noise_latent_sha256": null,
+  "final_noise_latent_sha256": null,
+  "sigma_schedule": [0.9999999403953552, ..., 0.11361567676067352],
+  "initial_noise_latent_reused": false,
+  "final_noise_latent_reused": false,
+  "prediction_latents_reused": 0,
+  "reused_latents_from": null,
   "height": 480,
   "width": 832,
   "fps": 16,
@@ -70,4 +99,27 @@ The JSON sidecar records the generation parameters and runtime environment:
     "python_version": "3.13.11 (main, Jan 28 2026, 00:01:45) [Clang 21.1.4 ]"
   }
 }
+```
+
+Notes about some of the fields:
+- `generation_id` is a short random identifier for the run
+- `reused_latents_from` records the source generation's `generation_id`
+- `sigma_schedule` records the actual sigma value used for each denoising step
+
+
+## Syncing data between pods
+- Generate a key pair for syncing files between pods on your host machine in the root of the repository via `ssh-keygen -t ed25519 -f runpod_sync -N ""`.
+- Add the `runpod_sync` private key as `SYNC_PRIVATE_KEY` secret on RunPod.
+
+Every pod with that environment variable can pull `/workspace/` from any other pod running the same image. From the destination pod, run:
+
+```bash
+runpod-sync <source-ssh-host> <source-ssh-port>
+```
+
+This copies the source pod's `/workspace/` into the current pod's `/workspace/`. Top-level hidden files and folders in `/workspace`, such as `.cache`, are ignored. Use `--dry-run` to preview changes, and add `--delete` only when the destination should exactly match the source:
+
+```bash
+runpod-sync <source-ssh-host> <source-ssh-port> --dry-run
+runpod-sync <source-ssh-host> <source-ssh-port> --delete
 ```
