@@ -1,0 +1,14 @@
+{"id":"consistent-attr-001","seed":420001,"prompt":"A blue car drives past a white picket fence on a sunny day"}
+{"id":"consistent-attr-200","seed":420002,"prompt":"A scientist in safety goggles examines a sample next to a girl in a scrub top, both working diligently in a laboratory"}
+{"id":"dynamic-attr-001","seed":421003,"prompt":"A timelapse of a leaf transitioning from green to bright red as autumn progresses."}
+{"id":"dynamic-attr-200","seed":421004,"prompt":"The green and fresh leaf is curling and turning brown as the balloon is deflating and wrinkling."}
+{"id":"spatial-relationship-001","seed":422005,"prompt":"A dog running on the left of a bicycle"}
+{"id":"spatial-relationship-200","seed":422006,"prompt":"A boy reading behind a bench"}
+{"id":"motion-binding-001","seed":423007,"prompt":"A cat slinking to the left side of a cozy living room"}
+{"id":"motion-binding-200","seed":423008,"prompt":"A large flag is hoisted upward on the flagpole, while a bird flying downwards from the flagpole to the ground"}
+{"id":"action-binding-001","seed":424009,"prompt":"A dog runs through a field while a cat climbs a tree"}
+{"id":"action-binding-200","seed":424010,"prompt":"A rabbit wears a detective hat and a cat drives a toy car"}
+{"id":"interaction-001","seed":425011,"prompt":"Two cars collide at an intersection"}
+{"id":"interaction-200","seed":426012,"prompt":"Two kids have a water balloon fight on a hot day."}
+{"id":"numeracy-001","seed":426013,"prompt":"One tree stands tall, swaying gently in the breeze."}
+{"id":"numeracy-200","seed":426014,"prompt":"Five chairs sit around a campfire, and seven people roasting marshmallows."}

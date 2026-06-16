@@ -6,6 +6,8 @@ This repository contains a harness for running inference validation experiments 
 - `prompts/` contains the built-in prompt datasets
 - `configs.yml` defines the available inference configurations
 
+The bundled prompt sets use prompts from the [T2V-CompBench](https://github.com/KaiyueSun98/T2V-CompBench/tree/V2/prompts) dataset, which covers diverse video generation settings that are challenging for current models.
+
 ## Usage
 - Build and publish the `Dockerfile.runpod` image with `build-image.sh`
 - Choose the desired GPU configuration on RunPod.io and deploy the image to the pod
