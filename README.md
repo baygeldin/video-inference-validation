@@ -14,26 +14,26 @@ The bundled prompt sets use prompts from the [T2V-CompBench](https://github.com/
 - SSH into the container and run inference with the `viv` CLI
 
 ```bash
-viv -p pilot /workspace/outputs
+viv generate -p pilot /workspace/outputs
 ```
 
 Use `--config`/`-c` to select an inference config from `configs.yml`:
 
 ```bash
-viv -p pilot -c cfg_disabled /workspace/outputs
-viv -p pilot --config random_seed /workspace/outputs
-viv -p pilot --config steps_minus_1 /workspace/outputs
-viv -p pilot --config steps_minus_10 /workspace/outputs
-viv -p pilot --config tp4_parallelism /workspace/outputs
-viv -p pilot --config cache_dit /workspace/outputs
-viv -p pilot --config int4_quantization /workspace/outputs
-viv -p pilot --config fp8_quantization /workspace/outputs
+viv generate -p pilot -c cfg_disabled /workspace/outputs
+viv generate -p pilot --config random_seed /workspace/outputs
+viv generate -p pilot --config steps_minus_1 /workspace/outputs
+viv generate -p pilot --config steps_minus_10 /workspace/outputs
+viv generate -p pilot --config tp4_parallelism /workspace/outputs
+viv generate -p pilot --config cache_dit /workspace/outputs
+viv generate -p pilot --config int4_quantization /workspace/outputs
+viv generate -p pilot --config fp8_quantization /workspace/outputs
 ```
 
 Latent capture is disabled by default. Use `--save-latents` to also write the initial noise latent, final noise latent, and each denoising step model prediction:
 
 ```bash
-viv -p pilot --save-latents /workspace/outputs
+viv generate -p pilot --save-latents /workspace/outputs
 ```
 
 Saved tensors can be reused by pointing at the folder that contains files named
@@ -42,13 +42,13 @@ like `<id>.initial_noise_latent.safetensors`,
 `<id>.final_noise_latent.safetensors`:
 
 ```bash
-viv -p pilot --reuse-latents-from /workspace/previous-outputs \
+viv generate -p pilot --reuse-latents-from /workspace/previous-outputs \
   --reuse-initial-latents /workspace/outputs
 
-viv -p pilot --reuse-latents-from /workspace/previous-outputs \
+viv generate -p pilot --reuse-latents-from /workspace/previous-outputs \
   --reuse-prediction-latents 10 /workspace/outputs
 
-viv -p pilot --reuse-latents-from /workspace/previous-outputs \
+viv generate -p pilot --reuse-latents-from /workspace/previous-outputs \
   --reuse-final-latents /workspace/outputs
 ```
 
@@ -108,6 +108,45 @@ Notes about some of the fields:
 - `generation_id` is a short random identifier for the run
 - `reused_latents_from` records the source generation's `generation_id`
 - `sigma_schedule` records the actual sigma value used for each denoising step
+
+Saved latent runs can be compared with `viv compare`. The command writes
+`comparison.json` in the output folder and includes only prompt IDs that are
+present in the baseline and every compared generation:
+
+```bash
+viv compare \
+  --output /workspace/comparison \
+  --baseline /workspace/baseline-outputs \
+  /workspace/experiment-a \
+  /workspace/experiment-b
+```
+
+For now, comparison reports RMSE and relative L2 drift for each final latent
+tensor:
+
+```json
+{
+  "baseline": {
+    "gpu_model": "NVIDIA H100 80GB HBM3",
+    "config_name": "default"
+  },
+  "generations": [
+    {
+      "gpu_model": "NVIDIA A100-SXM4-80GB",
+      "config_name": "tp2_parallelism",
+      "examples": [
+        {
+          "prompt_id": "action-binding-001",
+          "final_latent": {
+            "rmse": 0.001,
+            "relative_l2": 0.0001
+          }
+        }
+      ]
+    }
+  ]
+}
+```
 
 
 ## Syncing data between pods
