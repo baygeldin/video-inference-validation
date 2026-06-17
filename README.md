@@ -27,6 +27,7 @@ viv -p pilot --config steps_minus_10 /workspace/outputs
 viv -p pilot --config tp4_parallelism /workspace/outputs
 viv -p pilot --config cache_dit /workspace/outputs
 viv -p pilot --config int4_quantization /workspace/outputs
+viv -p pilot --config fp8_quantization /workspace/outputs
 ```
 
 Latent capture is disabled by default. Use `--save-latents` to also write the initial noise latent, final noise latent, and each denoising step model prediction:
@@ -91,9 +92,9 @@ The JSON sidecar records the generation parameters and runtime environment:
   "cache_backend": null,
   "environment": {
     "gpu_model": "NVIDIA H100 80GB HBM3",
-    "vllm_version": "0.22.0",
-    "vllm_omni_version": "0.22.0rc2.dev13+gbc794e625",
-    "vllm_omni_commit": "bc794e625f14ce425575210199bbb53f71cb860c",
+    "vllm_version": "0.23.0",
+    "vllm_omni_version": "0.23.0rc1",
+    "vllm_omni_commit": "7b837944a16ff440df0b19e71c6eca310d8dfc36",
     "pytorch_version": "2.11.0+cu130",
     "cuda_version": "13.0",
     "nvidia_driver_version": "580.159.03",
