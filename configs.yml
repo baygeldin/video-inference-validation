@@ -24,6 +24,10 @@ steps_minus_10:
   <<: *default
   num_inference_steps: 30
 
+tp2_parallelism:
+  <<: *default
+  tensor_parallelism: 2
+
 tp4_parallelism:
   <<: *default
   tensor_parallelism: 4
