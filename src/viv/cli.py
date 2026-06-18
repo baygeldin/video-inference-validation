@@ -4,6 +4,7 @@ import argparse
 import sys
 from pathlib import Path
 
+from viv.compare import compare_generations
 from viv.config import load_inference_config
 from viv.models import LatentReuseConfig
 from viv.prompts import resolve_prompts_path
@@ -13,9 +14,33 @@ from viv.runner import run
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="viv",
-        description="Generate Wan2.2 videos with vLLM-Omni.",
+        description="Generate Wan2.2 videos and compare saved generation artifacts.",
         allow_abbrev=False,
     )
+    subparsers = parser.add_subparsers(dest="command", required=True)
+    generate_parser = subparsers.add_parser(
+        "generate",
+        description="Generate Wan2.2 videos with vLLM-Omni.",
+        help="Generate Wan2.2 videos with vLLM-Omni.",
+        allow_abbrev=False,
+    )
+    _add_generate_arguments(generate_parser)
+    generate_parser.set_defaults(handler=_run_generate, parser=generate_parser)
+
+    compare_parser = subparsers.add_parser(
+        "compare",
+        description="Compare saved generation artifacts against a baseline.",
+        help="Compare saved generation artifacts against a baseline.",
+        allow_abbrev=False,
+    )
+    _add_compare_arguments(compare_parser)
+    compare_parser.set_defaults(handler=_run_compare)
+
+    args = parser.parse_args(argv)
+    return args.handler(args)
+
+
+def _add_generate_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "-p",
         "--prompts",
@@ -63,7 +88,10 @@ def main(argv: list[str] | None = None) -> int:
         help="Decode the saved final latent directly, skipping prompt encoding and denoising",
     )
     parser.add_argument("output_dir", type=Path, help="Output folder path")
-    args = parser.parse_args(argv)
+
+
+def _run_generate(args: argparse.Namespace) -> int:
+    parser = args.parser
     reuse_requested = (
         args.reuse_initial_latent
         or args.reuse_predictions is not None
@@ -99,8 +127,45 @@ def main(argv: list[str] | None = None) -> int:
             latent_reuse=latent_reuse,
         )
     except Exception as exc:
-        print(f"viv: error: {exc}", file=sys.stderr)
+        print(f"viv generate: error: {exc}", file=sys.stderr)
         return 2
+    return 0
+
+
+def _add_compare_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--output",
+        dest="output_dir",
+        type=Path,
+        required=True,
+        help="Folder where comparison results should be written",
+    )
+    parser.add_argument(
+        "--baseline",
+        dest="baseline_dir",
+        type=Path,
+        required=True,
+        help="Generation folder to use as the comparison baseline",
+    )
+    parser.add_argument(
+        "generation_dirs",
+        nargs="+",
+        type=Path,
+        help="Generation folders to compare with the baseline",
+    )
+
+
+def _run_compare(args: argparse.Namespace) -> int:
+    try:
+        output_path = compare_generations(
+            args.output_dir,
+            args.baseline_dir,
+            args.generation_dirs,
+        )
+    except Exception as exc:
+        print(f"viv compare: error: {exc}", file=sys.stderr)
+        return 2
+    print(f"wrote {output_path}", flush=True)
     return 0
 
 
