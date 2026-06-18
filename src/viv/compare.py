@@ -2,6 +2,10 @@ from __future__ import annotations
 
 import json
 import math
+import re
+import shutil
+import subprocess
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -12,13 +16,28 @@ if TYPE_CHECKING:
 
 COMPARISON_FILENAME = "comparison.json"
 FINAL_LATENT_SUFFIX = ".final_noise_latent.safetensors"
+VIDEO_SUFFIX = ".mp4"
+_SSIM_SCORE_PATTERN = re.compile(r"\bAll:(?P<score>[-+0-9.eE]+)")
 
 
 @dataclass(frozen=True)
 class GenerationArtifacts:
     gpu_model: str | None
     config_name: str
-    examples: dict[str, Path]
+    examples: dict[str, ExampleArtifacts]
+
+
+@dataclass(frozen=True)
+class ExampleArtifacts:
+    final_latent_path: Path
+    video_path: Path
+
+
+@dataclass(frozen=True)
+class VideoInfo:
+    width: int
+    height: int
+    frame_count: int
 
 
 def compare_generations(
@@ -51,8 +70,12 @@ def compare_generations(
                     {
                         "prompt_id": prompt_id,
                         "final_latent": _final_latent_metrics(
-                            baseline.examples[prompt_id],
-                            generation.examples[prompt_id],
+                            baseline.examples[prompt_id].final_latent_path,
+                            generation.examples[prompt_id].final_latent_path,
+                        ),
+                        "video_file": _video_file_metrics(
+                            baseline.examples[prompt_id].video_path,
+                            generation.examples[prompt_id].video_path,
                         ),
                     }
                     for prompt_id in common_prompt_ids
@@ -80,7 +103,7 @@ def _read_generation_artifacts(generation_dir: Path) -> GenerationArtifacts:
     if not metadata_paths:
         raise ValueError(f"{generation_dir} does not contain sidecar JSON files")
 
-    examples: dict[str, Path] = {}
+    examples: dict[str, ExampleArtifacts] = {}
     config_names: set[str] = set()
     gpu_models: set[str | None] = set()
     for metadata_path in metadata_paths:
@@ -97,9 +120,13 @@ def _read_generation_artifacts(generation_dir: Path) -> GenerationArtifacts:
             )
         gpu_models.add(gpu_model)
 
-        latent_path = generation_dir / f"{prompt_id}{FINAL_LATENT_SUFFIX}"
-        if latent_path.exists():
-            examples[prompt_id] = latent_path
+        final_latent_path = generation_dir / f"{prompt_id}{FINAL_LATENT_SUFFIX}"
+        video_path = generation_dir / f"{prompt_id}{VIDEO_SUFFIX}"
+        if final_latent_path.exists() and video_path.exists():
+            examples[prompt_id] = ExampleArtifacts(
+                final_latent_path=final_latent_path,
+                video_path=video_path,
+            )
 
     if len(config_names) != 1:
         raise ValueError(
@@ -112,7 +139,9 @@ def _read_generation_artifacts(generation_dir: Path) -> GenerationArtifacts:
             f"{sorted(gpu_models, key=lambda value: value or '')}"
         )
     if not examples:
-        raise ValueError(f"{generation_dir} does not contain final latent tensors")
+        raise ValueError(
+            f"{generation_dir} does not contain comparable final latent and video files"
+        )
 
     return GenerationArtifacts(
         gpu_model=next(iter(gpu_models)),
@@ -186,3 +215,140 @@ def _load_latent_tensor(latent_path: Path) -> "torch.Tensor":
     if not tensor.is_floating_point():
         tensor = tensor.float()
     return tensor
+
+
+def _video_file_metrics(
+    baseline_path: Path,
+    generation_path: Path,
+) -> dict[str, float]:
+    baseline_info = _video_info(baseline_path)
+    generation_info = _video_info(generation_path)
+    if (baseline_info.width, baseline_info.height) != (
+        generation_info.width,
+        generation_info.height,
+    ):
+        raise ValueError(
+            "video dimensions differ for "
+            f"{baseline_path.name} and {generation_path.name}: "
+            f"{baseline_info.width}x{baseline_info.height} != "
+            f"{generation_info.width}x{generation_info.height}"
+        )
+    if baseline_info.frame_count != generation_info.frame_count:
+        raise ValueError(
+            "video frame counts differ for "
+            f"{baseline_path.name} and {generation_path.name}: "
+            f"{baseline_info.frame_count} != {generation_info.frame_count}"
+        )
+
+    scores = _ffmpeg_ssim_scores(generation_path, baseline_path)
+    if not scores:
+        raise ValueError(f"{baseline_path} and {generation_path} contain no frames")
+    if len(scores) != baseline_info.frame_count:
+        raise ValueError(
+            f"ffmpeg reported {len(scores)} SSIM scores for {generation_path.name}, "
+            f"expected {baseline_info.frame_count}"
+        )
+    return {
+        "mean_ssim": sum(scores) / len(scores),
+        "max_ssim": max(scores),
+        "min_ssim": min(scores),
+    }
+
+
+def _video_info(video_path: Path) -> VideoInfo:
+    ffprobe = shutil.which("ffprobe")
+    if ffprobe is None:
+        raise ValueError("ffprobe is required to compare video files")
+
+    result = _run_command(
+        [
+            ffprobe,
+            "-v",
+            "error",
+            "-select_streams",
+            "v:0",
+            "-count_frames",
+            "-show_entries",
+            "stream=nb_read_frames,width,height",
+            "-of",
+            "json",
+            str(video_path),
+        ],
+        context=f"probing {video_path}",
+    )
+    payload = json.loads(result.stdout)
+    streams = payload.get("streams")
+    if not isinstance(streams, list) or not streams:
+        raise ValueError(f"{video_path} does not contain a video stream")
+    stream = streams[0]
+    if not isinstance(stream, dict):
+        raise ValueError(f"{video_path} ffprobe stream output is invalid")
+    return VideoInfo(
+        width=_json_int(video_path, stream, "width"),
+        height=_json_int(video_path, stream, "height"),
+        frame_count=_json_int(video_path, stream, "nb_read_frames"),
+    )
+
+
+def _ffmpeg_ssim_scores(generation_path: Path, baseline_path: Path) -> list[float]:
+    ffmpeg = shutil.which("ffmpeg")
+    if ffmpeg is None:
+        raise ValueError("ffmpeg is required to compare video files")
+
+    with tempfile.TemporaryDirectory(prefix="viv-ssim-") as tmp_dir:
+        stats_path = Path(tmp_dir) / "ssim.log"
+        _run_command(
+            [
+                ffmpeg,
+                "-hide_banner",
+                "-nostats",
+                "-i",
+                str(generation_path),
+                "-i",
+                str(baseline_path),
+                "-lavfi",
+                f"ssim=stats_file={stats_path}:eof_action=endall:repeatlast=0",
+                "-f",
+                "null",
+                "-",
+            ],
+            context=f"computing SSIM for {generation_path} against {baseline_path}",
+        )
+        return _read_ssim_scores(stats_path)
+
+
+def _read_ssim_scores(stats_path: Path) -> list[float]:
+    scores = []
+    with stats_path.open("r", encoding="utf-8") as fh:
+        for line in fh:
+            match = _SSIM_SCORE_PATTERN.search(line)
+            if match is None:
+                continue
+            scores.append(float(match.group("score")))
+    return scores
+
+
+def _json_int(path: Path, payload: dict[str, Any], key: str) -> int:
+    value = payload.get(key)
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        return int(value)
+    raise ValueError(f"{path} ffprobe output is missing integer field {key}")
+
+
+def _run_command(
+    command: list[str],
+    *,
+    context: str,
+) -> subprocess.CompletedProcess[str]:
+    result = subprocess.run(
+        command,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        message = result.stderr.strip() or result.stdout.strip()
+        raise ValueError(f"{context} failed: {message}")
+    return result

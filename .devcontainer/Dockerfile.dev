@@ -16,6 +16,7 @@ RUN apt-get update \
       bash \
       curl \
       git \
+      ffmpeg \
       vim \
       dumb-init \
       ca-certificates \

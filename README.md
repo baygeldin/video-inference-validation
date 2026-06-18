@@ -121,8 +121,7 @@ viv compare \
   /workspace/experiment-b
 ```
 
-For now, comparison reports RMSE and relative L2 drift for each final latent
-tensor:
+For now, comparison reports RMSE and relative L2 drift for each final latent tensor, plus mean, max, and min per-frame SSIM for each video file. Video SSIM comparison uses `ffmpeg` and `ffprobe`:
 
 ```json
 {
@@ -140,6 +139,11 @@ tensor:
           "final_latent": {
             "rmse": 0.001,
             "relative_l2": 0.0001
+          },
+          "video_file": {
+            "mean_ssim": 0.95,
+            "max_ssim": 0.98,
+            "min_ssim": 0.91
           }
         }
       ]
