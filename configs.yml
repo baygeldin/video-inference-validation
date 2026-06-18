@@ -14,6 +14,8 @@ default: &default
   export_quality: 5.0
   tensor_parallelism: 1
   cache_backend: null
+  quantization: null
+  force_cutlass_fp8: false
   random_seed: false
 
 steps_minus_1:
@@ -41,6 +43,8 @@ fp8_quantization:
   <<: *default
   model_name: nvidia/Wan2.2-T2V-A14B-Diffusers-FP8
   model_revision: e687a84fbbd5bc3614753d436de8a9eb78e2043e
+  quantization: fp8
+  force_cutlass_fp8: true
 
 cfg_disabled:
   <<: *default

@@ -58,6 +58,8 @@ def write_sidecar_metadata(
         "quality": config.export_quality,
         "tensor_parallelism": config.tensor_parallelism,
         "cache_backend": config.cache_backend,
+        "quantization": config.quantization,
+        "force_cutlass_fp8": config.force_cutlass_fp8,
         "environment": dict(environment),
     }
     tmp_path = metadata_path.with_suffix(".tmp.json")

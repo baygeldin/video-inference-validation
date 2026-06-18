@@ -66,6 +66,10 @@ class OfflineVideoGenerator:
             attention_backend=config.attention_backend,
             parallel_config=parallel_config,
             cache_backend=config.cache_backend,
+            quantization=config.quantization,
+            force_cutlass_fp8=config.force_cutlass_fp8,
+            boundary_ratio=config.boundary_ratio,
+            flow_shift=config.flow_shift,
         )
 
     def generate(self, prompt: Prompt, video_path: Path) -> GenerationResult:

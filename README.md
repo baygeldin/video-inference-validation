@@ -90,6 +90,8 @@ The JSON sidecar records the generation parameters and runtime environment:
   "quality": 5.0,
   "tensor_parallelism": 1,
   "cache_backend": null,
+  "quantization": null,
+  "force_cutlass_fp8": false,
   "environment": {
     "gpu_model": "NVIDIA H100 80GB HBM3",
     "vllm_version": "0.23.0",

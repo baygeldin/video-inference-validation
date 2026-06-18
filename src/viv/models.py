@@ -34,6 +34,8 @@ class InferenceConfig:
     export_quality: float
     tensor_parallelism: int
     cache_backend: str | None
+    quantization: str | None
+    force_cutlass_fp8: bool
     random_seed: bool
 
 

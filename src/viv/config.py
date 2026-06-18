@@ -68,6 +68,12 @@ def load_inference_config(config_name: str) -> InferenceConfig:
         cache_backend=_cache_backend(
             values.get("cache_backend", None), name, "cache_backend"
         ),
+        quantization=_quantization(
+            values.get("quantization", None), name, "quantization"
+        ),
+        force_cutlass_fp8=_bool(
+            values.get("force_cutlass_fp8", False), name, "force_cutlass_fp8"
+        ),
         random_seed=_bool(values.get("random_seed", False), name, "random_seed"),
     )
 
@@ -146,6 +152,22 @@ def _cache_backend(value: object, config_name: str, field: str) -> str | None:
 
     parsed = _non_empty_str(value, config_name, field).lower()
     allowed = {"none", "cache_dit", "tea_cache"}
+    if parsed not in allowed:
+        joined = ", ".join(sorted(allowed))
+        raise ValueError(
+            f"config '{config_name}' field '{field}' must be one of: {joined}"
+        )
+    if parsed == "none":
+        return None
+    return parsed
+
+
+def _quantization(value: object, config_name: str, field: str) -> str | None:
+    if value is None:
+        return None
+
+    parsed = _non_empty_str(value, config_name, field).lower()
+    allowed = {"none", "fp8"}
     if parsed not in allowed:
         joined = ", ".join(sorted(allowed))
         raise ValueError(

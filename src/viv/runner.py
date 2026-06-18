@@ -26,7 +26,9 @@ def run(
         f"attention={config.attention_backend}, "
         f"export_quality={config.export_quality}, "
         f"tp={config.tensor_parallelism}, "
-        f"cache_backend={config.cache_backend}",
+        f"cache_backend={config.cache_backend}, "
+        f"quantization={config.quantization}, "
+        f"force_cutlass_fp8={config.force_cutlass_fp8}",
         flush=True,
     )
     generator = OfflineVideoGenerator(
