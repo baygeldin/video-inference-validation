@@ -16,6 +16,7 @@ if TYPE_CHECKING:
 
 COMPARISON_FILENAME = "comparison.json"
 FINAL_LATENT_SUFFIX = ".final_noise_latent.safetensors"
+PREDICTION_LATENT_PATTERN = re.compile(r"\.denoising_step_(?P<step>\d+)\.safetensors$")
 VIDEO_SUFFIX = ".mp4"
 _SSIM_SCORE_PATTERN = re.compile(r"\bAll:(?P<score>[-+0-9.eE]+)")
 
@@ -31,6 +32,7 @@ class GenerationArtifacts:
 class ExampleArtifacts:
     final_latent_path: Path
     video_path: Path
+    prediction_latent_paths: dict[int, Path]
 
 
 @dataclass(frozen=True)
@@ -69,13 +71,17 @@ def compare_generations(
                 "examples": [
                     {
                         "prompt_id": prompt_id,
-                        "final_latent": _final_latent_metrics(
-                            baseline.examples[prompt_id].final_latent_path,
-                            generation.examples[prompt_id].final_latent_path,
-                        ),
                         "video_file": _video_file_metrics(
                             baseline.examples[prompt_id].video_path,
                             generation.examples[prompt_id].video_path,
+                        ),
+                        "final_latent": _latent_metrics(
+                            baseline.examples[prompt_id].final_latent_path,
+                            generation.examples[prompt_id].final_latent_path,
+                        ),
+                        "predictions": _prediction_metrics(
+                            baseline.examples[prompt_id].prediction_latent_paths,
+                            generation.examples[prompt_id].prediction_latent_paths,
                         ),
                     }
                     for prompt_id in common_prompt_ids
@@ -126,6 +132,10 @@ def _read_generation_artifacts(generation_dir: Path) -> GenerationArtifacts:
             examples[prompt_id] = ExampleArtifacts(
                 final_latent_path=final_latent_path,
                 video_path=video_path,
+                prediction_latent_paths=_prediction_latent_paths(
+                    generation_dir,
+                    prompt_id,
+                ),
             )
 
     if len(config_names) != 1:
@@ -169,7 +179,7 @@ def _metadata_string(
     return value
 
 
-def _final_latent_metrics(
+def _latent_metrics(
     baseline_path: Path,
     generation_path: Path,
 ) -> dict[str, float]:
@@ -189,15 +199,53 @@ def _final_latent_metrics(
     baseline_norm = torch.linalg.vector_norm(baseline).item()
     diff_norm = torch.linalg.vector_norm(diff).item()
     if baseline_norm == 0.0:
-        relative_l2 = 0.0 if diff_norm == 0.0 else math.inf
+        relative_l2_error = 0.0 if diff_norm == 0.0 else math.inf
     else:
-        relative_l2 = diff_norm / baseline_norm
-    if not math.isfinite(relative_l2):
+        relative_l2_error = diff_norm / baseline_norm
+    if not math.isfinite(relative_l2_error):
         raise ValueError(f"relative L2 is not finite for {generation_path.name}")
     return {
         "rmse": rmse,
-        "relative_l2": relative_l2,
+        "relative_l2_error": relative_l2_error,
     }
+
+
+def _prediction_metrics(
+    baseline_paths: dict[int, Path],
+    generation_paths: dict[int, Path],
+) -> dict[str, float]:
+    common_steps = sorted(set(baseline_paths) & set(generation_paths))
+    if not common_steps:
+        raise ValueError("no matching prediction latent steps to compare")
+
+    step_metrics = [
+        _latent_metrics(baseline_paths[step], generation_paths[step])
+        for step in common_steps
+    ]
+    rmses = [metrics["rmse"] for metrics in step_metrics]
+    relative_l2_errors = [
+        metrics["relative_l2_error"] for metrics in step_metrics
+    ]
+    return {
+        "mean_rmse": sum(rmses) / len(rmses),
+        "min_rmse": min(rmses),
+        "max_rmse": max(rmses),
+        "mean_relative_l2_error": (
+            sum(relative_l2_errors) / len(relative_l2_errors)
+        ),
+        "min_relative_l2_error": min(relative_l2_errors),
+        "max_relative_l2_error": max(relative_l2_errors),
+    }
+
+
+def _prediction_latent_paths(generation_dir: Path, prompt_id: str) -> dict[int, Path]:
+    paths = {}
+    for path in generation_dir.glob(f"{prompt_id}.denoising_step_*.safetensors"):
+        match = PREDICTION_LATENT_PATTERN.search(path.name)
+        if match is None:
+            continue
+        paths[int(match.group("step"))] = path
+    return paths
 
 
 def _load_latent_tensor(latent_path: Path) -> "torch.Tensor":
