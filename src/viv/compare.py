@@ -261,9 +261,7 @@ def _load_latent_tensor(latent_path: Path) -> "torch.Tensor":
         raise ValueError(
             f"{latent_path} must contain a 'latents' tensor or exactly one tensor"
         )
-    if not tensor.is_floating_point():
-        tensor = tensor.float()
-    return tensor
+    return tensor.float()
 
 
 def _video_file_metrics(
