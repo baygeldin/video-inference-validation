@@ -1,0 +1,356 @@
+{
+  "baseline": {
+    "gpu_model": "NVIDIA H100 80GB HBM3",
+    "config_name": "default"
+  },
+  "generations": [
+    {
+      "gpu_model": "NVIDIA H100 80GB HBM3",
+      "config_name": "steps_minus_1",
+      "examples": [
+        {
+          "prompt_id": "action-binding-001",
+          "final_latent": {
+            "rmse": 0.02451859600841999,
+            "relative_l2": 0.028123108968026164
+          },
+          "video_file": {
+            "mean_ssim": 0.9729711728395062,
+            "max_ssim": 0.975766,
+            "min_ssim": 0.968684
+          }
+        },
+        {
+          "prompt_id": "action-binding-200",
+          "final_latent": {
+            "rmse": 0.07667724043130875,
+            "relative_l2": 0.06841445064826945
+          },
+          "video_file": {
+            "mean_ssim": 0.9763667530864197,
+            "max_ssim": 0.983202,
+            "min_ssim": 0.933232
+          }
+        },
+        {
+          "prompt_id": "consistent-attr-001",
+          "final_latent": {
+            "rmse": 0.061412982642650604,
+            "relative_l2": 0.08319559930756758
+          },
+          "video_file": {
+            "mean_ssim": 0.9594037407407408,
+            "max_ssim": 0.96493,
+            "min_ssim": 0.952975
+          }
+        },
+        {
+          "prompt_id": "consistent-attr-200",
+          "final_latent": {
+            "rmse": 0.04802783578634262,
+            "relative_l2": 0.04815782647759282
+          },
+          "video_file": {
+            "mean_ssim": 0.9829304814814814,
+            "max_ssim": 0.983902,
+            "min_ssim": 0.978635
+          }
+        },
+        {
+          "prompt_id": "dynamic-attr-001",
+          "final_latent": {
+            "rmse": 0.06427142024040222,
+            "relative_l2": 0.06020647686380194
+          },
+          "video_file": {
+            "mean_ssim": 0.9626413086419753,
+            "max_ssim": 0.969008,
+            "min_ssim": 0.935344
+          }
+        },
+        {
+          "prompt_id": "dynamic-attr-200",
+          "final_latent": {
+            "rmse": 0.07823153585195541,
+            "relative_l2": 0.06417752689877478
+          },
+          "video_file": {
+            "mean_ssim": 0.9778486790123456,
+            "max_ssim": 0.981068,
+            "min_ssim": 0.973752
+          }
+        },
+        {
+          "prompt_id": "interaction-001",
+          "final_latent": {
+            "rmse": 0.047622863203287125,
+            "relative_l2": 0.06208363481522815
+          },
+          "video_file": {
+            "mean_ssim": 0.9769285185185185,
+            "max_ssim": 0.978421,
+            "min_ssim": 0.974356
+          }
+        },
+        {
+          "prompt_id": "interaction-200",
+          "final_latent": {
+            "rmse": 0.054591432213783264,
+            "relative_l2": 0.06922700886568142
+          },
+          "video_file": {
+            "mean_ssim": 0.9584043333333334,
+            "max_ssim": 0.965279,
+            "min_ssim": 0.944715
+          }
+        },
+        {
+          "prompt_id": "motion-binding-001",
+          "final_latent": {
+            "rmse": 0.037490084767341614,
+            "relative_l2": 0.04922443449376313
+          },
+          "video_file": {
+            "mean_ssim": 0.9834809135802468,
+            "max_ssim": 0.983994,
+            "min_ssim": 0.982972
+          }
+        },
+        {
+          "prompt_id": "motion-binding-200",
+          "final_latent": {
+            "rmse": 0.023813145235180855,
+            "relative_l2": 0.023325263998535836
+          },
+          "video_file": {
+            "mean_ssim": 0.9906396172839507,
+            "max_ssim": 0.991257,
+            "min_ssim": 0.989518
+          }
+        },
+        {
+          "prompt_id": "numeracy-001",
+          "final_latent": {
+            "rmse": 0.02430868335068226,
+            "relative_l2": 0.02507044311580217
+          },
+          "video_file": {
+            "mean_ssim": 0.9820013333333333,
+            "max_ssim": 0.983832,
+            "min_ssim": 0.97986
+          }
+        },
+        {
+          "prompt_id": "numeracy-200",
+          "final_latent": {
+            "rmse": 0.051875993609428406,
+            "relative_l2": 0.06624730434645901
+          },
+          "video_file": {
+            "mean_ssim": 0.9727395555555556,
+            "max_ssim": 0.974969,
+            "min_ssim": 0.967679
+          }
+        },
+        {
+          "prompt_id": "spatial-relationship-001",
+          "final_latent": {
+            "rmse": 0.04378863051533699,
+            "relative_l2": 0.049887164001606144
+          },
+          "video_file": {
+            "mean_ssim": 0.9610428024691358,
+            "max_ssim": 0.97108,
+            "min_ssim": 0.946061
+          }
+        },
+        {
+          "prompt_id": "spatial-relationship-200",
+          "final_latent": {
+            "rmse": 0.027434883639216423,
+            "relative_l2": 0.04600963517737107
+          },
+          "video_file": {
+            "mean_ssim": 0.9803302592592592,
+            "max_ssim": 0.981601,
+            "min_ssim": 0.978631
+          }
+        }
+      ]
+    },
+    {
+      "gpu_model": "NVIDIA A100-SXM4-80GB",
+      "config_name": "tp2_parallelism",
+      "examples": [
+        {
+          "prompt_id": "action-binding-001",
+          "final_latent": {
+            "rmse": 0.047651518136262894,
+            "relative_l2": 0.0546568625317616
+          },
+          "video_file": {
+            "mean_ssim": 0.958125086419753,
+            "max_ssim": 0.961774,
+            "min_ssim": 0.953247
+          }
+        },
+        {
+          "prompt_id": "action-binding-200",
+          "final_latent": {
+            "rmse": 0.09272449463605881,
+            "relative_l2": 0.08273158128273829
+          },
+          "video_file": {
+            "mean_ssim": 0.9709930740740741,
+            "max_ssim": 0.980127,
+            "min_ssim": 0.916346
+          }
+        },
+        {
+          "prompt_id": "consistent-attr-001",
+          "final_latent": {
+            "rmse": 0.07952819019556046,
+            "relative_l2": 0.10773630027259815
+          },
+          "video_file": {
+            "mean_ssim": 0.9542783950617284,
+            "max_ssim": 0.962769,
+            "min_ssim": 0.937438
+          }
+        },
+        {
+          "prompt_id": "consistent-attr-200",
+          "final_latent": {
+            "rmse": 0.07126618176698685,
+            "relative_l2": 0.07145875336522214
+          },
+          "video_file": {
+            "mean_ssim": 0.9756955925925926,
+            "max_ssim": 0.977449,
+            "min_ssim": 0.969293
+          }
+        },
+        {
+          "prompt_id": "dynamic-attr-001",
+          "final_latent": {
+            "rmse": 0.0744422897696495,
+            "relative_l2": 0.0697347614820057
+          },
+          "video_file": {
+            "mean_ssim": 0.9575468148148147,
+            "max_ssim": 0.966444,
+            "min_ssim": 0.922403
+          }
+        },
+        {
+          "prompt_id": "dynamic-attr-200",
+          "final_latent": {
+            "rmse": 0.09018803387880325,
+            "relative_l2": 0.0739866231194479
+          },
+          "video_file": {
+            "mean_ssim": 0.9730738888888889,
+            "max_ssim": 0.976945,
+            "min_ssim": 0.967986
+          }
+        },
+        {
+          "prompt_id": "interaction-001",
+          "final_latent": {
+            "rmse": 0.06402845680713654,
+            "relative_l2": 0.0834780006710102
+          },
+          "video_file": {
+            "mean_ssim": 0.9674122469135803,
+            "max_ssim": 0.969532,
+            "min_ssim": 0.963041
+          }
+        },
+        {
+          "prompt_id": "interaction-200",
+          "final_latent": {
+            "rmse": 0.06793225556612015,
+            "relative_l2": 0.08614492686601397
+          },
+          "video_file": {
+            "mean_ssim": 0.9506016913580247,
+            "max_ssim": 0.959157,
+            "min_ssim": 0.935104
+          }
+        },
+        {
+          "prompt_id": "motion-binding-001",
+          "final_latent": {
+            "rmse": 0.05479604750871658,
+            "relative_l2": 0.07194867812456997
+          },
+          "video_file": {
+            "mean_ssim": 0.9781427654320988,
+            "max_ssim": 0.978693,
+            "min_ssim": 0.976698
+          }
+        },
+        {
+          "prompt_id": "motion-binding-200",
+          "final_latent": {
+            "rmse": 0.038094259798526764,
+            "relative_l2": 0.03731383735217433
+          },
+          "video_file": {
+            "mean_ssim": 0.9869817654320987,
+            "max_ssim": 0.988494,
+            "min_ssim": 0.984894
+          }
+        },
+        {
+          "prompt_id": "numeracy-001",
+          "final_latent": {
+            "rmse": 0.033268410712480545,
+            "relative_l2": 0.03431084042121454
+          },
+          "video_file": {
+            "mean_ssim": 0.9790443086419752,
+            "max_ssim": 0.980651,
+            "min_ssim": 0.977256
+          }
+        },
+        {
+          "prompt_id": "numeracy-200",
+          "final_latent": {
+            "rmse": 0.07331453263759613,
+            "relative_l2": 0.09362720017392598
+          },
+          "video_file": {
+            "mean_ssim": 0.9627123456790123,
+            "max_ssim": 0.964848,
+            "min_ssim": 0.956318
+          }
+        },
+        {
+          "prompt_id": "spatial-relationship-001",
+          "final_latent": {
+            "rmse": 0.07397156208753586,
+            "relative_l2": 0.08427651916134647
+          },
+          "video_file": {
+            "mean_ssim": 0.940427975308642,
+            "max_ssim": 0.954782,
+            "min_ssim": 0.908443
+          }
+        },
+        {
+          "prompt_id": "spatial-relationship-200",
+          "final_latent": {
+            "rmse": 0.03736910969018936,
+            "relative_l2": 0.06266988017175426
+          },
+          "video_file": {
+            "mean_ssim": 0.9773273827160494,
+            "max_ssim": 0.978621,
+            "min_ssim": 0.974831
+          }
+        }
+      ]
+    }
+  ]
+}
