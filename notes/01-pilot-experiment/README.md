@@ -24,7 +24,7 @@ However, when it comes to the `steps_minus_1` config, it sometimes hard to disti
 
 ## Configurations tested
 
-To see the full parameters and environment configuration for each generation, check out the `.json` sidecars in this folder.
+To see the full parameters and environment configuration for each generation, check out the `.json` sidecars in the `artifacts` folder.
 
 ### Overview
 - H100 SXM
