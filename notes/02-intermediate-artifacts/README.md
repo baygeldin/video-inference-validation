@@ -64,22 +64,22 @@ Across all 14 prompts:
 - Per-frame SSIM (Structural Similarity Index Measure) calculated from the video files is higher for the malicious run than for the benign run.
 - Final-latent error is lower for the malicious run than for the benign run.
 
+
 | Configuration | Mean SSIM | Min SSIM | Max SSIM | Final latent RMSE | Final latent relative L2 error |
 | --- | ---: | ---: | ---: | ---: | ---: |
 | H100, 39 steps | 0.974124 | 0.964744 | 0.977736 | 0.047433 | 0.053096 |
 | A100, TP=2 | 0.966597 | 0.953093 | 0.971449 | 0.064184 | 0.072434 |
 
-Plots:
 
-![Mean SSIM scatter plot](plots/mean_ssim_scatter.png)
+![Mean SSIM scatter plot](plots/mean_ssim_scatter.png | width=250)
 
-![Min SSIM scatter plot](plots/min_ssim_scatter.png)
+![Min SSIM scatter plot](plots/min_ssim_scatter.png | width=250)
 
-![Max SSIM scatter plot](plots/max_ssim_scatter.png)
+![Max SSIM scatter plot](plots/max_ssim_scatter.png | width=250)
 
-![Final latent RMSE scatter plot](plots/rmse_scatter.png)
+![Final latent RMSE scatter plot](plots/rmse_scatter.png | width=250)
 
-![Final latent relative L2 error scatter plot](plots/relative_l2_error_scatter.png)
+![Final latent relative L2 error scatter plot](plots/relative_l2_error_scatter.png | width=250)
 
 Detailed per-prompt measurements can be found in [comparison.json](comparison.json).
 
