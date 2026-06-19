@@ -37,11 +37,6 @@ int4_quantization:
   model_name: Intel/Wan2.2-T2V-A14B-Diffusers-int4-AutoRound
   model_revision: 0fe5b7a14c052f1473b5e0306e35c54791bc604d
 
-fp8_quantization:
-  <<: *default
-  model_name: nvidia/Wan2.2-T2V-A14B-Diffusers-FP8
-  model_revision: e687a84fbbd5bc3614753d436de8a9eb78e2043e
-
 cfg_disabled:
   <<: *default
   guidance_scale: 1.0
