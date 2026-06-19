@@ -46,9 +46,19 @@ I made sure that the logic related to saving artifacts during inference accounts
 
 Instead, the malicious run should reuse the first 20 saved artifacts exactly as if it were doing an honest 40-step generation, then compress the remaining 20 denoising steps into 19 steps. This models a more realistic cheating strategy: match the saved prefix to pass validation against the saved artifacts, then save compute in the suffix to cheat validation against the final video file.
 
+You can check the `sigma_schedule` metadata field in the saved JSON sidecars in the artifacts folder (e.g. compare the schedule in `h100_sxm__default/spatial-relationship-001.json` and `h100_sxm__steps_minus_1/spatial-relationship-001.json`).
+
 ## Results
 
-After reusing the artifacts from the first 20 steps, both benign and malicious outputs were visually difficult to distinguish in the sampled videos, but the metrics showed the real problem: the malicious deviation was consistently closer to the H100 baseline than the benign A100 TP=2 deviation.
+After reusing the artifacts from the first 20 steps, both benign and malicious outputs were visually difficult to distinguish in the sampled videos. The examples below show the baseline, benign deviation, and malicious deviation in order:
+
+https://github.com/user-attachments/assets/b03c8cc7-3c56-4f4d-883b-2d37c0209d09
+
+https://github.com/user-attachments/assets/f946bd85-f530-4f60-b02b-f4ca3e003776
+
+https://github.com/user-attachments/assets/bbe964b1-8f67-4576-adc1-18beb84f844e
+
+However, the metrics showed the real problem: the malicious deviation was consistently closer to the H100 baseline than the benign A100 TP=2 deviation.
 
 Across all 14 prompts:
 - Per-frame SSIM (Structural Similarity Index Measure) calculated from the video files is higher for the malicious run than for the benign run.
@@ -60,11 +70,16 @@ Across all 14 prompts:
 | A100, TP=2 | 0.966597 | 0.953093 | 0.971449 | 0.064184 | 0.072434 |
 
 Plots:
-- [Mean SSIM](plots/mean_ssim_scatter.png)
-- [Min SSIM](plots/min_ssim_scatter.png)
-- [Max SSIM](plots/max_ssim_scatter.png)
-- [Final latent RMSE](plots/rmse_scatter.png)
-- [Final latent relative L2 error](plots/relative_l2_error_scatter.png)
+
+![Mean SSIM scatter plot](plots/mean_ssim_scatter.png)
+
+![Min SSIM scatter plot](plots/min_ssim_scatter.png)
+
+![Max SSIM scatter plot](plots/max_ssim_scatter.png)
+
+![Final latent RMSE scatter plot](plots/rmse_scatter.png)
+
+![Final latent relative L2 error scatter plot](plots/relative_l2_error_scatter.png)
 
 Detailed per-prompt measurements can be found in [comparison.json](comparison.json).
 
