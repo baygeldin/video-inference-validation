@@ -82,6 +82,15 @@ def _add_generate_arguments(parser: argparse.ArgumentParser) -> None:
         help="Reuse the first COUNT saved denoising predictions for each prompt",
     )
     parser.add_argument(
+        "--save-original-predictions",
+        action="store_true",
+        help=(
+            "When reusing prediction latents, still run model inference for reused "
+            "steps and save the fresh predictions before stepping with the reused "
+            "predictions"
+        ),
+    )
+    parser.add_argument(
         "--reuse-final-latents",
         dest="reuse_final_latent",
         action="store_true",
@@ -105,6 +114,12 @@ def _run_generate(args: argparse.Namespace) -> int:
         parser.error("--reuse-final-latents cannot be combined with other reuse modes")
     if args.reuse_predictions is not None and args.reuse_predictions < 0:
         parser.error("--reuse-prediction-latents must be a non-negative integer")
+    if args.save_original_predictions and args.reuse_predictions is None:
+        parser.error(
+            "--save-original-predictions requires --reuse-prediction-latents"
+        )
+    if args.save_original_predictions and not args.save_latents:
+        parser.error("--save-original-predictions requires --save-latents")
 
     latent_reuse = None
     if args.reuse_latents_from is not None:
@@ -112,6 +127,7 @@ def _run_generate(args: argparse.Namespace) -> int:
             source_dir=args.reuse_latents_from,
             reuse_initial_latent=args.reuse_initial_latent,
             reuse_predictions=args.reuse_predictions,
+            save_original_predictions=args.save_original_predictions,
             reuse_final_latent=args.reuse_final_latent,
         )
 

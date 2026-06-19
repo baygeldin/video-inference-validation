@@ -12,6 +12,7 @@ from viv.latent_capture import (
     REUSE_FINAL_LATENT_EXTRA_ARG,
     REUSE_LATENT_PREFIX_EXTRA_ARG,
     REUSE_PREDICTIONS_EXTRA_ARG,
+    SAVE_ORIGINAL_PREDICTIONS_EXTRA_ARG,
     SIGMA_SCHEDULE_PATH_EXTRA_ARG,
     final_noise_latent_path,
     initial_noise_latent_path,
@@ -97,6 +98,11 @@ class OfflineVideoGenerator:
             and self.latent_reuse.reuse_predictions is not None
             else 0
         )
+        original_prediction_latents_saved = (
+            reused_prediction_latents > 0
+            and self.latent_reuse is not None
+            and self.latent_reuse.save_original_predictions
+        )
         if reuse_final_latent:
             latents = None
         elif reuse_initial_latent and reuse_prefix is not None:
@@ -142,6 +148,8 @@ class OfflineVideoGenerator:
             extra_args[REUSE_PREDICTIONS_EXTRA_ARG] = (
                 self.latent_reuse.reuse_predictions
             )
+            if self.latent_reuse.save_original_predictions:
+                extra_args[SAVE_ORIGINAL_PREDICTIONS_EXTRA_ARG] = True
         if reuse_final_latent:
             extra_args[REUSE_FINAL_LATENT_EXTRA_ARG] = True
 
@@ -196,6 +204,7 @@ class OfflineVideoGenerator:
             initial_noise_latent_reused=initial_latent_reused,
             final_noise_latent_reused=reuse_final_latent,
             prediction_latents_reused=reused_prediction_latents,
+            original_prediction_latents_saved=original_prediction_latents_saved,
             reused_latents_from=reused_latents_from,
         )
 

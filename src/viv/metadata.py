@@ -42,6 +42,9 @@ def write_sidecar_metadata(
         "initial_noise_latent_reused": result.initial_noise_latent_reused,
         "final_noise_latent_reused": result.final_noise_latent_reused,
         "prediction_latents_reused": result.prediction_latents_reused,
+        "original_prediction_latents_saved": (
+            result.original_prediction_latents_saved
+        ),
         "reused_latents_from": result.reused_latents_from,
         "height": config.height,
         "width": config.width,

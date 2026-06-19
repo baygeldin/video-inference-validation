@@ -213,15 +213,15 @@ def _latent_metrics(
 def _prediction_metrics(
     baseline_paths: dict[int, Path],
     generation_paths: dict[int, Path],
-) -> dict[str, float]:
+) -> dict[str, Any]:
     common_steps = sorted(set(baseline_paths) & set(generation_paths))
     if not common_steps:
         raise ValueError("no matching prediction latent steps to compare")
 
-    step_metrics = [
-        _latent_metrics(baseline_paths[step], generation_paths[step])
-        for step in common_steps
-    ]
+    step_metrics = []
+    for step in common_steps:
+        metrics = _latent_metrics(baseline_paths[step], generation_paths[step])
+        step_metrics.append({"step_idx": step, **metrics})
     rmses = [metrics["rmse"] for metrics in step_metrics]
     relative_l2_errors = [
         metrics["relative_l2_error"] for metrics in step_metrics
@@ -235,6 +235,7 @@ def _prediction_metrics(
         ),
         "min_relative_l2_error": min(relative_l2_errors),
         "max_relative_l2_error": max(relative_l2_errors),
+        "steps": step_metrics,
     }
 
 

@@ -47,11 +47,18 @@ viv generate -p pilot --reuse-latents-from /workspace/previous-outputs \
 viv generate -p pilot --reuse-latents-from /workspace/previous-outputs \
   --reuse-prediction-latents 10 /workspace/outputs
 
+viv generate -p pilot --save-latents \
+  --reuse-latents-from /workspace/previous-outputs \
+  --reuse-prediction-latents 10 \
+  --save-original-predictions /workspace/outputs
+
 viv generate -p pilot --reuse-latents-from /workspace/previous-outputs \
   --reuse-final-latents /workspace/outputs
 ```
 
-If `--reuse-prediction-latents` is specified, then `--reuse-initial-latents` is enabled by default (because it makes no sense to reuse predictions without sharing the initial noise latent). It reuses the first `COUNT` saved model predictions and their original sigmas, then compresses the remaining saved sigma trajectory into the new run's remaining steps with equal spacing in UniPC lambda space.
+If `--reuse-prediction-latents` is specified, then `--reuse-initial-latents` is enabled by default (because it makes no sense to reuse predictions without sharing the initial noise latent). It uses the first `COUNT` saved model predictions and their original sigmas for denoising, then compresses the remaining saved sigma trajectory into the new run's remaining steps with equal spacing in UniPC lambda space.
+
+By default, reused prediction steps skip model inference and load the saved predictions directly. Add `--save-original-predictions` with `--save-latents` to still run model inference for reused steps and save the fresh prediction tensors for comparison; those fresh tensors are discarded after saving and the previously saved predictions are used to update the latent state.
 
 The script runs offline inference through vLLM-Omni and writes:
 ```text
@@ -75,6 +82,7 @@ The JSON sidecar records the generation parameters and runtime environment:
   "initial_noise_latent_reused": false,
   "final_noise_latent_reused": false,
   "prediction_latents_reused": 0,
+  "original_prediction_latents_saved": false,
   "reused_latents_from": null,
   "height": 480,
   "width": 832,
@@ -107,6 +115,7 @@ Notes about some of the fields:
 - `generation_id` is a short random identifier for the run
 - `reused_latents_from` records the source generation's `generation_id`
 - `sigma_schedule` records the actual sigma value used for each denoising step
+- `original_prediction_latents_saved` records whether reused prediction steps ran fresh model inference and saved those fresh predictions
 
 Saved latent runs can be compared with `viv compare`. The command writes
 `comparison.json` in the output folder and includes only prompt IDs that are
@@ -120,7 +129,7 @@ viv compare \
   /workspace/experiment-b
 ```
 
-Comparison reports RMSE and relative L2 error for each final latent tensor, mean/min/max per-step RMSE and relative L2 error for each matching denoising prediction latents, and mean/min/max per-frame SSIM for each generated video file. 
+Comparison reports RMSE and relative L2 error for each final latent tensor, mean/min/max RMSE and relative L2 error across matching denoising prediction latents, per-step prediction drift metrics, and mean/min/max per-frame SSIM for each generated video file.
 
 ```json
 {
@@ -150,7 +159,14 @@ Comparison reports RMSE and relative L2 error for each final latent tensor, mean
             "max_rmse": 0.01,
             "mean_relative_l2_error": 0.0001,
             "min_relative_l2_error": 0.0,
-            "max_relative_l2_error": 0.001
+            "max_relative_l2_error": 0.001,
+            "steps": [
+              {
+                "step_idx": 0,
+                "rmse": 0.0,
+                "relative_l2_error": 0.0
+              }
+            ]
           }
         }
       ]
