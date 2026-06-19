@@ -27,7 +27,6 @@ viv generate -p pilot --config steps_minus_10 /workspace/outputs
 viv generate -p pilot --config tp4_parallelism /workspace/outputs
 viv generate -p pilot --config cache_dit /workspace/outputs
 viv generate -p pilot --config int4_quantization /workspace/outputs
-viv generate -p pilot --config fp8_quantization /workspace/outputs
 ```
 
 Latent capture is disabled by default. Use `--save-latents` to also write the initial noise latent, final noise latent, and each denoising step model prediction:
