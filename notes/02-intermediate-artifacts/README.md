@@ -68,12 +68,6 @@ Across all 14 prompts:
 - Final-latent error is *lower* for the malicious run than for the benign run.
 
 
-| Configuration | Mean SSIM | Min SSIM | Max SSIM | Final latent RMSE | Final latent relative L2 error |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| H100, 39 steps | 0.974124 | 0.964744 | 0.977736 | 0.047433 | 0.053096 |
-| A100, TP=2 | 0.966597 | 0.953093 | 0.971449 | 0.064184 | 0.072434 |
-
-
 <img src="plots/mean_ssim_scatter.png" alt="Mean SSIM scatter plot" width="500">
 
 <img src="plots/min_ssim_scatter.png" alt="Min SSIM scatter plot" width="500">
