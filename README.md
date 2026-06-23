@@ -29,52 +29,47 @@ viv generate -p pilot --config cache_dit /workspace/outputs
 viv generate -p pilot --config int4_quantization /workspace/outputs
 ```
 
-Latent capture is disabled by default. Use `--save-latents` to also write the initial noise latent, final noise latent, and each denoising step model prediction:
+Tensor capture is disabled by default. Use the explicit save flags to write the artifacts you need, or `--save-all` to write the initial noise latent, final noise latent, each denoising step model prediction, and prompt embeddings:
 
 ```bash
-viv generate -p pilot --save-latents /workspace/outputs
+viv generate -p pilot \
+  --save-prompt-embeds \
+  --save-initial-latents \
+  --save-prediction-latents \
+  --save-final-latents \
+  /workspace/outputs
+
+viv generate -p pilot --save-all /workspace/outputs
 ```
 
-Prompt embedding capture is also disabled by default. Add `--save-prompt-embeds` to write the encoded positive and negative prompt embedding tensors:
+Saved tensors can be reused by pointing at the folder that contains artifacts from a previous generation:
 
 ```bash
-viv generate -p pilot --save-latents --save-prompt-embeds /workspace/outputs
-```
-
-Saved tensors can be reused by pointing at the folder that contains files named like `<id>.initial_noise_latent.safetensors`, `<id>.denoising_step_0.safetensors`, and `<id>.final_noise_latent.safetensors`:
-
-```bash
-viv generate -p pilot --reuse-latents-from /workspace/previous-outputs \
-  --reuse-initial-latents /workspace/outputs
-
-viv generate -p pilot --reuse-latents-from /workspace/previous-outputs \
-  --reuse-prediction-latents 10 /workspace/outputs
-
-viv generate -p pilot --reuse-latents-from /workspace/previous-outputs \
-  --reuse-prediction-latents /workspace/outputs
-
-viv generate -p pilot --reuse-latents-from /workspace/previous-outputs \
-  --reuse-final-latents /workspace/outputs
-```
-
-Saved prompt embeddings can be reused independently with `--reuse-prompt-embeds`, or combined with latent reuse to fully capture the inference state:
-
-```bash
-viv generate -p pilot --reuse-latents-from /workspace/previous-outputs \
-  --reuse-prediction-latents 10 \
-  --reuse-prompt-embeds /workspace/outputs
+viv generate -p pilot \
+  --reuse-prompt-embeds \
+  --reuse-initial-latents \
+  --reuse-prediction-latents \
+  --reuse-final-latents \
+  --reuse-from /workspace/previous-outputs \
+  /workspace/outputs
 ```
 
 If `--reuse-prediction-latents` is specified, then `--reuse-initial-latents` is enabled by default (because it makes no sense to reuse predictions without sharing the initial noise latent). With a `COUNT`, it uses the first `COUNT` saved model predictions and their original sigmas for denoising, then compresses the remaining saved sigma trajectory into the new run's remaining steps with equal spacing in UniPC lambda space. Without a `COUNT`, it reuses all saved prediction steps from the source generation.
 
-By default, reused prediction steps skip model inference and load the saved predictions directly. Add `--save-original-predictions` to still run model inference for reused steps and save the fresh prediction tensors for comparison; those fresh tensors are discarded after saving and the previously saved predictions are used to update the latent state:
+By default, reused prediction steps still run model inference so `--save-prediction-latents` captures the fresh prediction tensors for comparison. Those fresh tensors are discarded after saving, and the previously saved predictions are used to update the latent state. Add `--skip-reused-steps` to load the reused predictions directly; reused steps are not rerun and their copied prediction tensors are not written to the output folder:
 
 ```bash
 viv generate -p pilot \
-  --save-latents \
-  --save-original-predictions \
-  --reuse-latents-from /workspace/previous-outputs \
+  --save-prediction-latents \
+  --reuse-from /workspace/previous-outputs \
   --reuse-prediction-latents 10 \
+  /workspace/outputs
+
+viv generate -p pilot \
+  --save-prediction-latents \
+  --reuse-from /workspace/previous-outputs \
+  --reuse-prediction-latents 10 \
+  --skip-reused-steps \
   /workspace/outputs
 ```
 

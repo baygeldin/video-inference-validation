@@ -13,7 +13,9 @@ LATENT_PREFIX_EXTRA_ARG = "viv_latent_prefix"
 PROMPT_EMBEDS_PREFIX_EXTRA_ARG = "viv_prompt_embeds_prefix"
 REUSE_LATENT_PREFIX_EXTRA_ARG = "viv_reuse_latent_prefix"
 REUSE_PREDICTIONS_EXTRA_ARG = "viv_reuse_predictions"
-SAVE_ORIGINAL_PREDICTIONS_EXTRA_ARG = "viv_save_original_predictions"
+SAVE_FINAL_LATENTS_EXTRA_ARG = "viv_save_final_latents"
+SAVE_PREDICTION_LATENTS_EXTRA_ARG = "viv_save_prediction_latents"
+SKIP_REUSED_STEPS_EXTRA_ARG = "viv_skip_reused_steps"
 REUSE_FINAL_LATENT_EXTRA_ARG = "viv_reuse_final_latent"
 SAVE_PROMPT_EMBEDS_EXTRA_ARG = "viv_save_prompt_embeds"
 REUSE_PROMPT_EMBEDS_EXTRA_ARG = "viv_reuse_prompt_embeds"
@@ -38,8 +40,13 @@ def install_wan_latent_capture() -> None:
         previous_seed = getattr(self, "_viv_seed", None)
         previous_reuse_prefix = getattr(self, "_viv_reuse_latent_prefix", None)
         previous_reuse_predictions = getattr(self, "_viv_reuse_predictions", None)
-        previous_save_original_predictions = getattr(
-            self, "_viv_save_original_predictions", None
+        previous_save_final_latents = getattr(self, "_viv_save_final_latents", None)
+        previous_save_prediction_latents = getattr(
+            self, "_viv_save_prediction_latents", None
+        )
+        previous_skip_reused_steps = getattr(self, "_viv_skip_reused_steps", None)
+        previous_suppress_prediction_latent_save = getattr(
+            self, "_viv_suppress_prediction_latent_save", None
         )
         previous_save_prompt_embeds = getattr(
             self, "_viv_save_prompt_embeds", None
@@ -53,9 +60,12 @@ def install_wan_latent_capture() -> None:
         self._viv_seed = _seed_from_request(req)
         self._viv_reuse_latent_prefix = _reuse_prefix_from_request(req)
         self._viv_reuse_predictions = _reuse_predictions_from_request(req)
-        self._viv_save_original_predictions = (
-            _save_original_predictions_from_request(req)
+        self._viv_save_final_latents = _save_final_latents_from_request(req)
+        self._viv_save_prediction_latents = (
+            _save_prediction_latents_from_request(req)
         )
+        self._viv_skip_reused_steps = _skip_reused_steps_from_request(req)
+        self._viv_suppress_prediction_latent_save = False
         self._viv_save_prompt_embeds = _save_prompt_embeds_from_request(req)
         self._viv_sigma_schedule_path = _sigma_schedule_path_from_request(req)
         self._viv_sigma_schedule = None
@@ -88,8 +98,11 @@ def install_wan_latent_capture() -> None:
             self._viv_seed = previous_seed
             self._viv_reuse_latent_prefix = previous_reuse_prefix
             self._viv_reuse_predictions = previous_reuse_predictions
-            self._viv_save_original_predictions = (
-                previous_save_original_predictions
+            self._viv_save_final_latents = previous_save_final_latents
+            self._viv_save_prediction_latents = previous_save_prediction_latents
+            self._viv_skip_reused_steps = previous_skip_reused_steps
+            self._viv_suppress_prediction_latent_save = (
+                previous_suppress_prediction_latent_save
             )
             self._viv_save_prompt_embeds = previous_save_prompt_embeds
             self._viv_sigma_schedule_path = previous_sigma_schedule_path
@@ -127,7 +140,7 @@ def install_wan_latent_capture() -> None:
             final_latent_path = _final_noise_latent_path_from_prefix(
                 getattr(self, "_viv_latent_prefix", None)
             )
-            if final_latent_path is not None:
+            if getattr(self, "_viv_save_final_latents", False):
                 _save_latents(
                     final_latent_path,
                     "final_noise",
@@ -165,19 +178,23 @@ def install_wan_latent_capture() -> None:
         if sigma_schedule is not None:
             sigma_schedule.append(sigma)
         noise_pred_to_save = getattr(self, "_viv_noise_pred_to_save", noise_pred)
-        _save_noise_pred(
-            _denoising_step_latent_path_from_prefix(
-                getattr(self, "_viv_latent_prefix", None), step_idx
-            ),
-            "denoising_step",
-            noise_pred_to_save,
-            {
-                "seed": getattr(self, "_viv_seed", None),
-                "step_idx": step_idx,
-                "timestep": _scalar_float(t),
-                "sigma": sigma,
-            },
-        )
+        if (
+            getattr(self, "_viv_save_prediction_latents", False)
+            and not getattr(self, "_viv_suppress_prediction_latent_save", False)
+        ):
+            _save_noise_pred(
+                _denoising_step_latent_path_from_prefix(
+                    getattr(self, "_viv_latent_prefix", None), step_idx
+                ),
+                "denoising_step",
+                noise_pred_to_save,
+                {
+                    "seed": getattr(self, "_viv_seed", None),
+                    "step_idx": step_idx,
+                    "timestep": _scalar_float(t),
+                    "sigma": sigma,
+                },
+            )
         self._viv_step_idx = step_idx + 1
         return updated_latents
 
@@ -515,10 +532,22 @@ def _reuse_predictions_from_request(req: Any) -> int | None:
     return int(count)
 
 
-def _save_original_predictions_from_request(req: Any) -> bool:
+def _save_final_latents_from_request(req: Any) -> bool:
     sampling_params = getattr(req, "sampling_params", None)
     extra_args = getattr(sampling_params, "extra_args", None) or {}
-    return _truthy(extra_args.get(SAVE_ORIGINAL_PREDICTIONS_EXTRA_ARG))
+    return _truthy(extra_args.get(SAVE_FINAL_LATENTS_EXTRA_ARG))
+
+
+def _save_prediction_latents_from_request(req: Any) -> bool:
+    sampling_params = getattr(req, "sampling_params", None)
+    extra_args = getattr(sampling_params, "extra_args", None) or {}
+    return _truthy(extra_args.get(SAVE_PREDICTION_LATENTS_EXTRA_ARG))
+
+
+def _skip_reused_steps_from_request(req: Any) -> bool:
+    sampling_params = getattr(req, "sampling_params", None)
+    extra_args = getattr(sampling_params, "extra_args", None) or {}
+    return _truthy(extra_args.get(SKIP_REUSED_STEPS_EXTRA_ARG))
 
 
 def _save_prompt_embeds_from_request(req: Any) -> bool:
@@ -648,9 +677,7 @@ def _diffuse_with_reused_denoising(
     first_frame_mask = values["first_frame_mask"]
 
     reuse_prefix = getattr(self, "_viv_reuse_latent_prefix", None)
-    save_original_predictions = bool(
-        getattr(self, "_viv_save_original_predictions", False)
-    )
+    skip_reused_steps = bool(getattr(self, "_viv_skip_reused_steps", False))
     if reuse_prefix is None:
         raise ValueError("missing latent reuse source prefix")
     if reuse_predictions > len(timesteps):
@@ -671,16 +698,25 @@ def _diffuse_with_reused_denoising(
             self._current_timestep = t
             set_forward_context_denoise_step_idx(step_idx)
 
-            if step_idx < reuse_predictions and not save_original_predictions:
+            if step_idx < reuse_predictions and skip_reused_steps:
                 latent_path = _denoising_step_latent_path_from_prefix(
                     reuse_prefix, step_idx
                 )
                 noise_pred = _load_noise_pred(
                     latent_path, device=latents.device, dtype=dtype
                 )
-                latents = self.scheduler_step_maybe_with_cfg(
-                    noise_pred, t, latents, do_true_cfg=False
+                previous_suppress_prediction_latent_save = getattr(
+                    self, "_viv_suppress_prediction_latent_save", False
                 )
+                self._viv_suppress_prediction_latent_save = True
+                try:
+                    latents = self.scheduler_step_maybe_with_cfg(
+                        noise_pred, t, latents, do_true_cfg=False
+                    )
+                finally:
+                    self._viv_suppress_prediction_latent_save = (
+                        previous_suppress_prediction_latent_save
+                    )
                 pbar.update()
                 continue
 

@@ -14,8 +14,10 @@ from viv.latent_capture import (
     REUSE_FINAL_LATENT_EXTRA_ARG,
     REUSE_LATENT_PREFIX_EXTRA_ARG,
     REUSE_PREDICTIONS_EXTRA_ARG,
-    SAVE_ORIGINAL_PREDICTIONS_EXTRA_ARG,
+    SAVE_FINAL_LATENTS_EXTRA_ARG,
+    SAVE_PREDICTION_LATENTS_EXTRA_ARG,
     SAVE_PROMPT_EMBEDS_EXTRA_ARG,
+    SKIP_REUSED_STEPS_EXTRA_ARG,
     SIGMA_SCHEDULE_PATH_EXTRA_ARG,
     final_noise_latent_path,
     initial_noise_latent_path,
@@ -55,12 +57,16 @@ class OfflineVideoGenerator:
     def __init__(
         self,
         config: InferenceConfig,
-        save_latents: bool = False,
+        save_initial_latents: bool = False,
+        save_final_latents: bool = False,
+        save_prediction_latents: bool = False,
         save_prompt_embeds: bool = False,
         latent_reuse: LatentReuseConfig | None = None,
     ) -> None:
         self.config = config
-        self.save_latents = save_latents
+        self.save_initial_latents = save_initial_latents
+        self.save_final_latents = save_final_latents
+        self.save_prediction_latents = save_prediction_latents
         self.save_prompt_embeds = save_prompt_embeds
         self.latent_reuse = latent_reuse
         os.environ["DIFFUSION_ATTENTION_BACKEND"] = config.attention_backend
@@ -124,7 +130,8 @@ class OfflineVideoGenerator:
         original_prediction_latents_saved = (
             reused_prediction_latents > 0
             and self.latent_reuse is not None
-            and self.latent_reuse.save_original_predictions
+            and not self.latent_reuse.skip_reused_steps
+            and self.save_prediction_latents
         )
         if reuse_final_latent:
             latents = None
@@ -153,22 +160,27 @@ class OfflineVideoGenerator:
                 initial_latent_sha256 = safetensors_sha256_metadata(
                     initial_latent_path
                 )
-            if self.save_latents:
+            if self.save_initial_latents:
                 initial_latent_sha256 = save_initial_noise_latents(
                     initial_noise_latent_path(video_path),
                     latents,
                     seed,
                 ) or initial_latent_sha256
+            if self.save_final_latents:
                 final_latent_path = final_noise_latent_path(video_path)
 
         extra_args: dict[str, object] = {
             "flow_shift": self.config.flow_shift,
             SIGMA_SCHEDULE_PATH_EXTRA_ARG: str(sigma_schedule_path.resolve()),
         }
-        if self.save_latents:
+        if self.save_final_latents or self.save_prediction_latents:
             extra_args[LATENT_PREFIX_EXTRA_ARG] = str(
                 video_path.with_suffix("").resolve()
             )
+        if self.save_final_latents:
+            extra_args[SAVE_FINAL_LATENTS_EXTRA_ARG] = True
+        if self.save_prediction_latents:
+            extra_args[SAVE_PREDICTION_LATENTS_EXTRA_ARG] = True
         if self.save_prompt_embeds:
             extra_args[PROMPT_EMBEDS_PREFIX_EXTRA_ARG] = str(
                 video_path.with_suffix("").resolve()
@@ -183,8 +195,8 @@ class OfflineVideoGenerator:
             and reuse_predictions is not None
         ):
             extra_args[REUSE_PREDICTIONS_EXTRA_ARG] = reuse_predictions
-            if self.latent_reuse.save_original_predictions:
-                extra_args[SAVE_ORIGINAL_PREDICTIONS_EXTRA_ARG] = True
+            if self.latent_reuse.skip_reused_steps:
+                extra_args[SKIP_REUSED_STEPS_EXTRA_ARG] = True
         if reuse_final_latent:
             extra_args[REUSE_FINAL_LATENT_EXTRA_ARG] = True
 

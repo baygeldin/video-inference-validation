@@ -43,7 +43,7 @@ class LatentReuseConfig:
     reuse_initial_latent: bool = False
     reuse_predictions: int | None = None
     reuse_all_predictions: bool = False
-    save_original_predictions: bool = False
+    skip_reused_steps: bool = False
     reuse_final_latent: bool = False
     reuse_prompt_embeds: bool = False
 
