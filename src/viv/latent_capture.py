@@ -10,10 +10,13 @@ from typing import Any
 
 
 LATENT_PREFIX_EXTRA_ARG = "viv_latent_prefix"
+PROMPT_EMBEDS_PREFIX_EXTRA_ARG = "viv_prompt_embeds_prefix"
 REUSE_LATENT_PREFIX_EXTRA_ARG = "viv_reuse_latent_prefix"
 REUSE_PREDICTIONS_EXTRA_ARG = "viv_reuse_predictions"
 SAVE_ORIGINAL_PREDICTIONS_EXTRA_ARG = "viv_save_original_predictions"
 REUSE_FINAL_LATENT_EXTRA_ARG = "viv_reuse_final_latent"
+SAVE_PROMPT_EMBEDS_EXTRA_ARG = "viv_save_prompt_embeds"
+REUSE_PROMPT_EMBEDS_EXTRA_ARG = "viv_reuse_prompt_embeds"
 SIGMA_SCHEDULE_PATH_EXTRA_ARG = "viv_sigma_schedule_path"
 
 
@@ -29,23 +32,31 @@ def install_wan_latent_capture() -> None:
 
     def forward(self: Any, req: Any, *args: Any, **kwargs: Any) -> Any:
         previous_prefix = getattr(self, "_viv_latent_prefix", None)
+        previous_prompt_embeds_prefix = getattr(
+            self, "_viv_prompt_embeds_prefix", None
+        )
         previous_seed = getattr(self, "_viv_seed", None)
         previous_reuse_prefix = getattr(self, "_viv_reuse_latent_prefix", None)
         previous_reuse_predictions = getattr(self, "_viv_reuse_predictions", None)
         previous_save_original_predictions = getattr(
             self, "_viv_save_original_predictions", None
         )
+        previous_save_prompt_embeds = getattr(
+            self, "_viv_save_prompt_embeds", None
+        )
         previous_sigma_schedule_path = getattr(
             self, "_viv_sigma_schedule_path", None
         )
         previous_sigma_schedule = getattr(self, "_viv_sigma_schedule", None)
         self._viv_latent_prefix = _prefix_from_request(req)
+        self._viv_prompt_embeds_prefix = _prompt_embeds_prefix_from_request(req)
         self._viv_seed = _seed_from_request(req)
         self._viv_reuse_latent_prefix = _reuse_prefix_from_request(req)
         self._viv_reuse_predictions = _reuse_predictions_from_request(req)
         self._viv_save_original_predictions = (
             _save_original_predictions_from_request(req)
         )
+        self._viv_save_prompt_embeds = _save_prompt_embeds_from_request(req)
         self._viv_sigma_schedule_path = _sigma_schedule_path_from_request(req)
         self._viv_sigma_schedule = None
         try:
@@ -54,15 +65,33 @@ def install_wan_latent_capture() -> None:
                 return _decode_reused_final_latent(
                     self, req, _output_type_from_call(req, args, kwargs)
                 )
+            if _reuse_prompt_embeds_from_request(req):
+                reuse_prefix = getattr(self, "_viv_reuse_latent_prefix", None)
+                if reuse_prefix is None:
+                    raise ValueError("missing prompt embedding reuse source prefix")
+                prompt_embeds, negative_prompt_embeds = load_prompt_embeddings(
+                    prompt_embeddings_path(reuse_prefix)
+                )
+                return _call_forward_with_prompt_embeddings(
+                    original_forward,
+                    self,
+                    req,
+                    args,
+                    kwargs,
+                    prompt_embeds,
+                    negative_prompt_embeds,
+                )
             return original_forward(self, req, *args, **kwargs)
         finally:
             self._viv_latent_prefix = previous_prefix
+            self._viv_prompt_embeds_prefix = previous_prompt_embeds_prefix
             self._viv_seed = previous_seed
             self._viv_reuse_latent_prefix = previous_reuse_prefix
             self._viv_reuse_predictions = previous_reuse_predictions
             self._viv_save_original_predictions = (
                 previous_save_original_predictions
             )
+            self._viv_save_prompt_embeds = previous_save_prompt_embeds
             self._viv_sigma_schedule_path = previous_sigma_schedule_path
             self._viv_sigma_schedule = previous_sigma_schedule
 
@@ -73,6 +102,18 @@ def install_wan_latent_capture() -> None:
         self._viv_step_idx = 0
         self._viv_sigma_schedule = []
         try:
+            if getattr(self, "_viv_save_prompt_embeds", False):
+                values = _diffuse_arguments(original_diffuse, self, args, kwargs)
+                _save_prompt_embeddings(
+                    prompt_embeddings_path_from_prefix(
+                        getattr(self, "_viv_prompt_embeds_prefix", None)
+                    ),
+                    values["prompt_embeds"],
+                    values["negative_prompt_embeds"],
+                    {
+                        "seed": getattr(self, "_viv_seed", None),
+                    },
+                )
             if reuse_predictions is None:
                 latents = original_diffuse(self, *args, **kwargs)
             else:
@@ -158,6 +199,10 @@ def denoising_step_latent_path(video_path: Path, step_idx: int) -> Path:
     return video_path.with_name(f"{video_path.stem}.denoising_step_{step_idx}.safetensors")
 
 
+def prompt_embeddings_path(video_path: Path) -> Path:
+    return video_path.with_name(f"{video_path.stem}.prompt_embeds.safetensors")
+
+
 def denoising_step_latent_paths(video_path: Path, num_inference_steps: int) -> list[Path]:
     return [
         denoising_step_latent_path(video_path, step_idx)
@@ -184,6 +229,54 @@ def _load_noise_pred(
     latent_path: Path, device: Any | None = None, dtype: Any | None = None
 ) -> Any:
     return _load_tensor(latent_path, "noise_pred", device=device, dtype=dtype)
+
+
+def load_prompt_embeddings(
+    embeddings_path: Path, device: Any | None = None, dtype: Any | None = None
+) -> tuple[Any, Any | None]:
+    tensors, _ = _load_prompt_embeddings_with_metadata(
+        embeddings_path, device=device, dtype=dtype
+    )
+    return tensors
+
+
+def prompt_embeddings_sha256_metadata(
+    embeddings_path: Path,
+) -> tuple[str, str | None]:
+    metadata = _safetensors_metadata(embeddings_path)
+    prompt_sha256 = metadata.get("prompt_embeds_sha256")
+    if not prompt_sha256:
+        raise ValueError(
+            f"{embeddings_path} does not contain prompt_embeds_sha256 metadata"
+        )
+    return prompt_sha256, metadata.get("negative_prompt_embeds_sha256")
+
+
+def _load_prompt_embeddings_with_metadata(
+    embeddings_path: Path,
+    device: Any | None = None,
+    dtype: Any | None = None,
+) -> tuple[tuple[Any, Any | None], dict[str, str]]:
+    from safetensors import safe_open
+
+    with safe_open(str(embeddings_path), framework="pt", device="cpu") as tensors:
+        keys = tensors.keys()
+        if "prompt_embeds" not in keys:
+            raise ValueError(f"{embeddings_path} does not contain a prompt_embeds tensor")
+        prompt_embeds = tensors.get_tensor("prompt_embeds")
+        negative_prompt_embeds = (
+            tensors.get_tensor("negative_prompt_embeds")
+            if "negative_prompt_embeds" in keys
+            else None
+        )
+        metadata = dict(tensors.metadata() or {})
+    if device is not None or dtype is not None:
+        prompt_embeds = prompt_embeds.to(device=device, dtype=dtype)
+        if negative_prompt_embeds is not None:
+            negative_prompt_embeds = negative_prompt_embeds.to(
+                device=device, dtype=dtype
+            )
+    return (prompt_embeds, negative_prompt_embeds), metadata
 
 
 def _load_tensor(
@@ -296,6 +389,56 @@ def _save_noise_pred(
     return _save_tensor(latent_path, "noise_pred", kind, noise_pred, metadata)
 
 
+def _save_prompt_embeddings(
+    embeddings_path: Path | None,
+    prompt_embeds: Any,
+    negative_prompt_embeds: Any | None,
+    metadata: dict[str, Any],
+) -> tuple[str, str | None] | None:
+    if embeddings_path is None or prompt_embeds is None or not _is_rank_zero():
+        return None
+
+    import torch
+    from safetensors.torch import save_file
+
+    prompt_embeds = _resolve_latents(prompt_embeds)
+    if not isinstance(prompt_embeds, torch.Tensor):
+        return None
+
+    tensors = {
+        "prompt_embeds": prompt_embeds.detach().to("cpu").contiguous(),
+    }
+    negative_sha256 = None
+    if negative_prompt_embeds is not None:
+        negative_prompt_embeds = _resolve_latents(negative_prompt_embeds)
+        if not isinstance(negative_prompt_embeds, torch.Tensor):
+            return None
+        tensors["negative_prompt_embeds"] = (
+            negative_prompt_embeds.detach().to("cpu").contiguous()
+        )
+        negative_sha256 = latent_sha256(tensors["negative_prompt_embeds"])
+
+    prompt_sha256 = latent_sha256(tensors["prompt_embeds"])
+    embeddings_path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = embeddings_path.with_name(
+        f"{embeddings_path.stem}.tmp{embeddings_path.suffix}"
+    )
+    stored_metadata = {
+        "kind": "prompt_embeddings",
+        **{
+            metadata_key: str(value)
+            for metadata_key, value in metadata.items()
+            if value is not None
+        },
+        "prompt_embeds_sha256": prompt_sha256,
+    }
+    if negative_sha256 is not None:
+        stored_metadata["negative_prompt_embeds_sha256"] = negative_sha256
+    save_file(tensors, str(tmp_path), metadata=stored_metadata)
+    tmp_path.replace(embeddings_path)
+    return prompt_sha256, negative_sha256
+
+
 def _save_tensor(
     tensor_path: Path | None,
     key: str,
@@ -345,6 +488,15 @@ def _prefix_from_request(req: Any) -> Path | None:
     return Path(prefix)
 
 
+def _prompt_embeds_prefix_from_request(req: Any) -> Path | None:
+    sampling_params = getattr(req, "sampling_params", None)
+    extra_args = getattr(sampling_params, "extra_args", None) or {}
+    prefix = extra_args.get(PROMPT_EMBEDS_PREFIX_EXTRA_ARG)
+    if prefix is None:
+        return None
+    return Path(prefix)
+
+
 def _reuse_prefix_from_request(req: Any) -> Path | None:
     sampling_params = getattr(req, "sampling_params", None)
     extra_args = getattr(sampling_params, "extra_args", None) or {}
@@ -367,6 +519,18 @@ def _save_original_predictions_from_request(req: Any) -> bool:
     sampling_params = getattr(req, "sampling_params", None)
     extra_args = getattr(sampling_params, "extra_args", None) or {}
     return _truthy(extra_args.get(SAVE_ORIGINAL_PREDICTIONS_EXTRA_ARG))
+
+
+def _save_prompt_embeds_from_request(req: Any) -> bool:
+    sampling_params = getattr(req, "sampling_params", None)
+    extra_args = getattr(sampling_params, "extra_args", None) or {}
+    return _truthy(extra_args.get(SAVE_PROMPT_EMBEDS_EXTRA_ARG))
+
+
+def _reuse_prompt_embeds_from_request(req: Any) -> bool:
+    sampling_params = getattr(req, "sampling_params", None)
+    extra_args = getattr(sampling_params, "extra_args", None) or {}
+    return _truthy(extra_args.get(REUSE_PROMPT_EMBEDS_EXTRA_ARG))
 
 
 def _reuse_final_latent_from_request(req: Any) -> bool:
@@ -403,6 +567,61 @@ def _denoising_step_latent_path_from_prefix(
     return prefix.with_name(f"{prefix.name}.denoising_step_{step_idx}.safetensors")
 
 
+def prompt_embeddings_path_from_prefix(prefix: Path | None) -> Path | None:
+    if prefix is None:
+        return None
+    return prefix.with_name(f"{prefix.name}.prompt_embeds.safetensors")
+
+
+def _call_forward_with_prompt_embeddings(
+    original_forward: Any,
+    self: Any,
+    req: Any,
+    args: tuple[Any, ...],
+    kwargs: dict[str, Any],
+    prompt_embeds: Any,
+    negative_prompt_embeds: Any | None,
+) -> Any:
+    bound = inspect.signature(original_forward).bind_partial(
+        self, req, *args, **kwargs
+    )
+    bound.arguments["prompt"] = None
+    bound.arguments["negative_prompt"] = None
+    bound.arguments["prompt_embeds"] = prompt_embeds
+    bound.arguments["negative_prompt_embeds"] = negative_prompt_embeds
+
+    previous_prompts = getattr(req, "prompts", None)
+    if previous_prompts is not None:
+        req.prompts = [_prompt_without_text(prompt) for prompt in previous_prompts]
+    try:
+        return original_forward(*bound.args, **bound.kwargs)
+    finally:
+        if previous_prompts is not None:
+            req.prompts = previous_prompts
+
+
+def _prompt_without_text(prompt: Any) -> Any:
+    if isinstance(prompt, str):
+        return {}
+    if isinstance(prompt, dict):
+        cleaned = dict(prompt)
+        cleaned.pop("prompt", None)
+        cleaned.pop("negative_prompt", None)
+        return cleaned
+    return prompt
+
+
+def _diffuse_arguments(
+    original_diffuse: Any,
+    self: Any,
+    args: tuple[Any, ...],
+    kwargs: dict[str, Any],
+) -> dict[str, Any]:
+    bound = inspect.signature(original_diffuse).bind(self, *args, **kwargs)
+    bound.apply_defaults()
+    return bound.arguments
+
+
 def _diffuse_with_reused_denoising(
     self: Any,
     original_diffuse: Any,
@@ -414,9 +633,7 @@ def _diffuse_with_reused_denoising(
         set_forward_context_denoise_step_idx,
     )
 
-    bound = inspect.signature(original_diffuse).bind(self, *args, **kwargs)
-    bound.apply_defaults()
-    values = bound.arguments
+    values = _diffuse_arguments(original_diffuse, self, args, kwargs)
 
     latents = values["latents"]
     timesteps = values["timesteps"]

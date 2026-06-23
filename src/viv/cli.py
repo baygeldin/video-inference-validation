@@ -66,6 +66,11 @@ def _add_generate_arguments(parser: argparse.ArgumentParser) -> None:
         ),
     )
     parser.add_argument(
+        "--save-prompt-embeds",
+        action="store_true",
+        help="Save encoded prompt embedding tensors (disabled by default)",
+    )
+    parser.add_argument(
         "--reuse-latents-from",
         dest="reuse_latents_from",
         type=Path,
@@ -99,6 +104,11 @@ def _add_generate_arguments(parser: argparse.ArgumentParser) -> None:
         ),
     )
     parser.add_argument(
+        "--reuse-prompt-embeds",
+        action="store_true",
+        help="Reuse saved prompt embedding tensors instead of encoding the prompt",
+    )
+    parser.add_argument(
         "--reuse-final-latents",
         dest="reuse_final_latent",
         action="store_true",
@@ -118,14 +128,22 @@ def _run_generate(args: argparse.Namespace) -> int:
     reuse_requested = (
         args.reuse_initial_latent
         or reuse_predictions_requested
+        or args.reuse_prompt_embeds
         or args.reuse_final_latent
     )
     if reuse_requested and args.reuse_latents_from is None:
-        parser.error("--reuse-latents-from is required when reusing latents")
+        parser.error("--reuse-latents-from is required when reusing saved tensors")
     if args.reuse_final_latent and (
         args.reuse_initial_latent or reuse_predictions_requested
     ):
         parser.error("--reuse-final-latents cannot be combined with other reuse modes")
+    if args.reuse_final_latent and (
+        args.save_prompt_embeds or args.reuse_prompt_embeds
+    ):
+        parser.error(
+            "--reuse-final-latents cannot be combined with prompt embedding "
+            "capture or reuse"
+        )
     if isinstance(args.reuse_predictions, int) and args.reuse_predictions < 0:
         parser.error("--reuse-prediction-latents must be a non-negative integer")
     if args.save_original_predictions and not reuse_predictions_requested:
@@ -146,6 +164,7 @@ def _run_generate(args: argparse.Namespace) -> int:
             reuse_all_predictions=reuse_all_predictions,
             save_original_predictions=args.save_original_predictions,
             reuse_final_latent=args.reuse_final_latent,
+            reuse_prompt_embeds=args.reuse_prompt_embeds,
         )
 
     try:
@@ -157,6 +176,7 @@ def _run_generate(args: argparse.Namespace) -> int:
             args.config.strip(),
             config,
             save_latents=args.save_latents,
+            save_prompt_embeds=args.save_prompt_embeds,
             latent_reuse=latent_reuse,
         )
     except Exception as exc:

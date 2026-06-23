@@ -45,6 +45,7 @@ class LatentReuseConfig:
     reuse_all_predictions: bool = False
     save_original_predictions: bool = False
     reuse_final_latent: bool = False
+    reuse_prompt_embeds: bool = False
 
 
 @dataclass(frozen=True)
@@ -53,13 +54,17 @@ class GenerationResult:
     duration_seconds: float
     initial_noise_latent_sha256: str | None
     final_noise_latent_sha256: str | None
+    prompt_embeds_sha256: str | None = None
+    negative_prompt_embeds_sha256: str | None = None
     sigma_schedule: list[float] | None = None
     initial_noise_latent_reused: bool = False
     final_noise_latent_reused: bool = False
     prediction_latents_reused: int = 0
+    prompt_embeds_reused: bool = False
     original_prediction_latents_saved: bool = False
     generation_id: str = field(default_factory=_new_generation_id)
     reused_latents_from: str | None = None
+    reused_prompt_embeds_from: str | None = None
 
 
 EnvironmentMetadata = Mapping[str, str | None]

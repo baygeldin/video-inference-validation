@@ -35,6 +35,12 @@ Latent capture is disabled by default. Use `--save-latents` to also write the in
 viv generate -p pilot --save-latents /workspace/outputs
 ```
 
+Prompt embedding capture is also disabled by default. Add `--save-prompt-embeds` to write the encoded positive and negative prompt embedding tensors:
+
+```bash
+viv generate -p pilot --save-latents --save-prompt-embeds /workspace/outputs
+```
+
 Saved tensors can be reused by pointing at the folder that contains files named like `<id>.initial_noise_latent.safetensors`, `<id>.denoising_step_0.safetensors`, and `<id>.final_noise_latent.safetensors`:
 
 ```bash
@@ -49,6 +55,14 @@ viv generate -p pilot --reuse-latents-from /workspace/previous-outputs \
 
 viv generate -p pilot --reuse-latents-from /workspace/previous-outputs \
   --reuse-final-latents /workspace/outputs
+```
+
+Saved prompt embeddings can be reused independently with `--reuse-prompt-embeds`, or combined with latent reuse to fully capture the inference state:
+
+```bash
+viv generate -p pilot --reuse-latents-from /workspace/previous-outputs \
+  --reuse-prediction-latents 10 \
+  --reuse-prompt-embeds /workspace/outputs
 ```
 
 If `--reuse-prediction-latents` is specified, then `--reuse-initial-latents` is enabled by default (because it makes no sense to reuse predictions without sharing the initial noise latent). With a `COUNT`, it uses the first `COUNT` saved model predictions and their original sigmas for denoising, then compresses the remaining saved sigma trajectory into the new run's remaining steps with equal spacing in UniPC lambda space. Without a `COUNT`, it reuses all saved prediction steps from the source generation.
@@ -72,6 +86,14 @@ The script runs offline inference through vLLM-Omni and writes:
 /workspace/outputs/<id>.json
 ```
 
+When enabled, tensor capture also writes files such as:
+```text
+/workspace/outputs/<id>.initial_noise_latent.safetensors
+/workspace/outputs/<id>.denoising_step_N.safetensors
+/workspace/outputs/<id>.final_noise_latent.safetensors
+/workspace/outputs/<id>.prompt_embeds.safetensors
+```
+
 The JSON sidecar records the generation parameters and runtime environment:
 ```json
 {
@@ -84,12 +106,16 @@ The JSON sidecar records the generation parameters and runtime environment:
   "seed": 420001,
   "initial_noise_latent_sha256": null,
   "final_noise_latent_sha256": null,
+  "prompt_embeds_sha256": null,
+  "negative_prompt_embeds_sha256": null,
   "sigma_schedule": [0.9999999403953552, ..., 0.11361567676067352],
   "initial_noise_latent_reused": false,
   "final_noise_latent_reused": false,
   "prediction_latents_reused": 0,
+  "prompt_embeds_reused": false,
   "original_prediction_latents_saved": false,
   "reused_latents_from": null,
+  "reused_prompt_embeds_from": null,
   "height": 480,
   "width": 832,
   "fps": 16,

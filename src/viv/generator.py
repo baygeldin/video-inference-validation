@@ -9,15 +9,20 @@ from typing import Any
 from viv.frames import wan_video_frames
 from viv.latent_capture import (
     LATENT_PREFIX_EXTRA_ARG,
+    PROMPT_EMBEDS_PREFIX_EXTRA_ARG,
+    REUSE_PROMPT_EMBEDS_EXTRA_ARG,
     REUSE_FINAL_LATENT_EXTRA_ARG,
     REUSE_LATENT_PREFIX_EXTRA_ARG,
     REUSE_PREDICTIONS_EXTRA_ARG,
     SAVE_ORIGINAL_PREDICTIONS_EXTRA_ARG,
+    SAVE_PROMPT_EMBEDS_EXTRA_ARG,
     SIGMA_SCHEDULE_PATH_EXTRA_ARG,
     final_noise_latent_path,
     initial_noise_latent_path,
     install_wan_latent_capture,
     load_latents,
+    prompt_embeddings_path,
+    prompt_embeddings_sha256_metadata,
     read_sigma_schedule,
     saved_denoising_prediction_count,
     safetensors_sha256_metadata,
@@ -51,10 +56,12 @@ class OfflineVideoGenerator:
         self,
         config: InferenceConfig,
         save_latents: bool = False,
+        save_prompt_embeds: bool = False,
         latent_reuse: LatentReuseConfig | None = None,
     ) -> None:
         self.config = config
         self.save_latents = save_latents
+        self.save_prompt_embeds = save_prompt_embeds
         self.latent_reuse = latent_reuse
         os.environ["DIFFUSION_ATTENTION_BACKEND"] = config.attention_backend
         model_path = resolve_model_path(config.model_name, config.model_revision)
@@ -97,6 +104,11 @@ class OfflineVideoGenerator:
         reuse_final_latent = (
             self.latent_reuse is not None and self.latent_reuse.reuse_final_latent
         )
+        reuse_prompt_embeds = (
+            self.latent_reuse is not None
+            and self.latent_reuse.reuse_prompt_embeds
+            and not reuse_final_latent
+        )
         initial_latent_reused = reuse_initial_latent and not reuse_final_latent
         reuse_predictions = (
             _resolve_reuse_prediction_count(self.latent_reuse, reuse_prefix)
@@ -125,9 +137,16 @@ class OfflineVideoGenerator:
             reuse_initial_latent=reuse_initial_latent,
             reuse_final_latent=reuse_final_latent,
         )
+        reused_prompt_embeds_from = _reused_prompt_embeds_generation_id(
+            reuse_prefix,
+            reuse_prompt_embeds=reuse_prompt_embeds,
+        )
 
         initial_latent_sha256 = None
         final_latent_path = None
+        prompt_embeds_path = prompt_embeddings_path(video_path)
+        prompt_embeds_sha256 = None
+        negative_prompt_embeds_sha256 = None
         if latents is not None:
             if reuse_initial_latent and reuse_prefix is not None:
                 initial_latent_path = initial_noise_latent_path(reuse_prefix)
@@ -150,8 +169,15 @@ class OfflineVideoGenerator:
             extra_args[LATENT_PREFIX_EXTRA_ARG] = str(
                 video_path.with_suffix("").resolve()
             )
+        if self.save_prompt_embeds:
+            extra_args[PROMPT_EMBEDS_PREFIX_EXTRA_ARG] = str(
+                video_path.with_suffix("").resolve()
+            )
+            extra_args[SAVE_PROMPT_EMBEDS_EXTRA_ARG] = True
         if reuse_prefix is not None:
             extra_args[REUSE_LATENT_PREFIX_EXTRA_ARG] = str(reuse_prefix.resolve())
+        if reuse_prompt_embeds:
+            extra_args[REUSE_PROMPT_EMBEDS_EXTRA_ARG] = True
         if (
             self.latent_reuse is not None
             and reuse_predictions is not None
@@ -204,17 +230,38 @@ class OfflineVideoGenerator:
             final_latent_sha256 = safetensors_sha256_metadata(final_latent_path)
         else:
             final_latent_sha256 = None
+        if self.save_prompt_embeds:
+            if not prompt_embeds_path.exists():
+                raise FileNotFoundError(
+                    "worker-side prompt embedding capture did not write expected "
+                    f"file: {prompt_embeds_path}"
+                )
+            (
+                prompt_embeds_sha256,
+                negative_prompt_embeds_sha256,
+            ) = prompt_embeddings_sha256_metadata(prompt_embeds_path)
+        elif reuse_prompt_embeds:
+            if reuse_prefix is None:
+                raise ValueError("missing prompt embedding reuse source prefix")
+            (
+                prompt_embeds_sha256,
+                negative_prompt_embeds_sha256,
+            ) = prompt_embeddings_sha256_metadata(prompt_embeddings_path(reuse_prefix))
         return GenerationResult(
             seed=seed,
             duration_seconds=time.perf_counter() - started_at,
             initial_noise_latent_sha256=initial_latent_sha256,
             final_noise_latent_sha256=final_latent_sha256,
+            prompt_embeds_sha256=prompt_embeds_sha256,
+            negative_prompt_embeds_sha256=negative_prompt_embeds_sha256,
             sigma_schedule=sigma_schedule,
             initial_noise_latent_reused=initial_latent_reused,
             final_noise_latent_reused=reuse_final_latent,
             prediction_latents_reused=reused_prediction_latents,
+            prompt_embeds_reused=reuse_prompt_embeds,
             original_prediction_latents_saved=original_prediction_latents_saved,
             reused_latents_from=reused_latents_from,
+            reused_prompt_embeds_from=reused_prompt_embeds_from,
         )
 
 
@@ -267,6 +314,16 @@ def _reused_latents_generation_id(
     reuse_final_latent: bool,
 ) -> str | None:
     if reuse_prefix is None or not (reuse_initial_latent or reuse_final_latent):
+        return None
+    return read_sidecar_generation_id(reuse_prefix.with_suffix(".json"))
+
+
+def _reused_prompt_embeds_generation_id(
+    reuse_prefix: Path | None,
+    *,
+    reuse_prompt_embeds: bool,
+) -> str | None:
+    if reuse_prefix is None or not reuse_prompt_embeds:
         return None
     return read_sidecar_generation_id(reuse_prefix.with_suffix(".json"))
 
