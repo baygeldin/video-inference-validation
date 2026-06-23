@@ -14,7 +14,6 @@ if TYPE_CHECKING:
     import torch
 
 
-COMPARISON_FILENAME = "comparison.json"
 FINAL_LATENT_SUFFIX = ".final_noise_latent.safetensors"
 PREDICTION_LATENT_PATTERN = re.compile(r"\.denoising_step_(?P<step>\d+)\.safetensors$")
 VIDEO_SUFFIX = ".mp4"
@@ -43,12 +42,14 @@ class VideoInfo:
 
 
 def compare_generations(
-    output_dir: Path,
+    output_path: Path,
     baseline_dir: Path,
     generation_dirs: list[Path],
 ) -> Path:
     if not generation_dirs:
         raise ValueError("at least one generation path is required")
+    if output_path.exists() and output_path.is_dir():
+        raise ValueError(f"{output_path} is a directory; expected a JSON file path")
 
     baseline = _read_generation_artifacts(baseline_dir)
     generations = [_read_generation_artifacts(path) for path in generation_dirs]
@@ -91,8 +92,7 @@ def compare_generations(
         ],
     }
 
-    output_dir.mkdir(parents=True, exist_ok=True)
-    output_path = output_dir / COMPARISON_FILENAME
+    output_path.parent.mkdir(parents=True, exist_ok=True)
     tmp_path = output_path.with_suffix(".tmp.json")
     with tmp_path.open("w", encoding="utf-8") as fh:
         json.dump(output, fh, indent=2, allow_nan=False)

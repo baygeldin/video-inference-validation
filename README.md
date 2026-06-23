@@ -151,11 +151,11 @@ Notes about some of the fields:
 
 ## Analysis
 
-Saved latent runs can be compared with `viv compare`. The command writes `comparison.json` in the output folder and includes only prompt IDs that are present in the baseline and every compared generation:
+Saved latent runs can be compared with `viv compare`. The command writes a JSON report to the output path and includes only prompt IDs that are present in the baseline and every compared generation:
 
 ```bash
 viv compare \
-  --output /workspace/comparison \
+  --output /workspace/comparison.json \
   --baseline /workspace/baseline-outputs \
   /workspace/experiment-a \
   /workspace/experiment-b

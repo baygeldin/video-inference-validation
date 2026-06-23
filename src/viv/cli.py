@@ -229,11 +229,12 @@ def _raise_argparse_error(message: str) -> NoReturn:
 
 def _add_compare_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
+        "-o",
         "--output",
-        dest="output_dir",
+        dest="output_path",
         type=Path,
         required=True,
-        help="Folder where comparison results should be written",
+        help="JSON file path where comparison results should be written",
     )
     parser.add_argument(
         "--baseline",
@@ -253,7 +254,7 @@ def _add_compare_arguments(parser: argparse.ArgumentParser) -> None:
 def _run_compare(args: argparse.Namespace) -> int:
     try:
         output_path = compare_generations(
-            args.output_dir,
+            args.output_path,
             args.baseline_dir,
             args.generation_dirs,
         )
