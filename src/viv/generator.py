@@ -12,17 +12,24 @@ from viv.latent_capture import (
     REUSE_FINAL_LATENT_EXTRA_ARG,
     REUSE_LATENT_PREFIX_EXTRA_ARG,
     REUSE_PREDICTIONS_EXTRA_ARG,
+    SAVE_ORIGINAL_PREDICTIONS_EXTRA_ARG,
     SIGMA_SCHEDULE_PATH_EXTRA_ARG,
     final_noise_latent_path,
     initial_noise_latent_path,
     install_wan_latent_capture,
     load_latents,
     read_sigma_schedule,
+    saved_denoising_prediction_count,
     safetensors_sha256_metadata,
     save_initial_noise_latents,
 )
 from viv.metadata import read_sidecar_generation_id
-from viv.models import GenerationResult, InferenceConfig, LatentReuseConfig, Prompt
+from viv.models import (
+    GenerationResult,
+    InferenceConfig,
+    LatentReuseConfig,
+    Prompt,
+)
 
 WAN_LATENT_CHANNELS = 16
 WAN_TEMPORAL_SCALE_FACTOR = 4
@@ -85,17 +92,27 @@ class OfflineVideoGenerator:
         reuse_initial_latent = self.latent_reuse is not None and (
             self.latent_reuse.reuse_initial_latent
             or self.latent_reuse.reuse_predictions is not None
+            or self.latent_reuse.reuse_all_predictions
         )
         reuse_final_latent = (
             self.latent_reuse is not None and self.latent_reuse.reuse_final_latent
         )
         initial_latent_reused = reuse_initial_latent and not reuse_final_latent
-        reused_prediction_latents = (
-            self.latent_reuse.reuse_predictions
+        reuse_predictions = (
+            _resolve_reuse_prediction_count(self.latent_reuse, reuse_prefix)
             if not reuse_final_latent
             and self.latent_reuse is not None
-            and self.latent_reuse.reuse_predictions is not None
-            else 0
+            and (
+                self.latent_reuse.reuse_predictions is not None
+                or self.latent_reuse.reuse_all_predictions
+            )
+            else None
+        )
+        reused_prediction_latents = reuse_predictions or 0
+        original_prediction_latents_saved = (
+            reused_prediction_latents > 0
+            and self.latent_reuse is not None
+            and self.latent_reuse.save_original_predictions
         )
         if reuse_final_latent:
             latents = None
@@ -137,11 +154,11 @@ class OfflineVideoGenerator:
             extra_args[REUSE_LATENT_PREFIX_EXTRA_ARG] = str(reuse_prefix.resolve())
         if (
             self.latent_reuse is not None
-            and self.latent_reuse.reuse_predictions is not None
+            and reuse_predictions is not None
         ):
-            extra_args[REUSE_PREDICTIONS_EXTRA_ARG] = (
-                self.latent_reuse.reuse_predictions
-            )
+            extra_args[REUSE_PREDICTIONS_EXTRA_ARG] = reuse_predictions
+            if self.latent_reuse.save_original_predictions:
+                extra_args[SAVE_ORIGINAL_PREDICTIONS_EXTRA_ARG] = True
         if reuse_final_latent:
             extra_args[REUSE_FINAL_LATENT_EXTRA_ARG] = True
 
@@ -196,6 +213,7 @@ class OfflineVideoGenerator:
             initial_noise_latent_reused=initial_latent_reused,
             final_noise_latent_reused=reuse_final_latent,
             prediction_latents_reused=reused_prediction_latents,
+            original_prediction_latents_saved=original_prediction_latents_saved,
             reused_latents_from=reused_latents_from,
         )
 
@@ -219,6 +237,19 @@ def _initial_noise_latents(config: InferenceConfig, seed: int) -> Any:
     )
     generator = torch.Generator(device="cpu").manual_seed(seed)
     return randn_tensor(shape, generator=generator, device="cpu", dtype=torch.float32)
+
+
+def _resolve_reuse_prediction_count(
+    latent_reuse: LatentReuseConfig,
+    reuse_prefix: Path | None,
+) -> int:
+    if not latent_reuse.reuse_all_predictions:
+        if latent_reuse.reuse_predictions is None:
+            raise ValueError("missing prediction latent reuse count")
+        return latent_reuse.reuse_predictions
+    if reuse_prefix is None:
+        raise ValueError("missing latent reuse source prefix")
+    return saved_denoising_prediction_count(reuse_prefix)
 
 
 def _latent_reuse_prefix(

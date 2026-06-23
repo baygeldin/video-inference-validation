@@ -12,6 +12,7 @@ from typing import Any
 LATENT_PREFIX_EXTRA_ARG = "viv_latent_prefix"
 REUSE_LATENT_PREFIX_EXTRA_ARG = "viv_reuse_latent_prefix"
 REUSE_PREDICTIONS_EXTRA_ARG = "viv_reuse_predictions"
+SAVE_ORIGINAL_PREDICTIONS_EXTRA_ARG = "viv_save_original_predictions"
 REUSE_FINAL_LATENT_EXTRA_ARG = "viv_reuse_final_latent"
 SIGMA_SCHEDULE_PATH_EXTRA_ARG = "viv_sigma_schedule_path"
 
@@ -31,6 +32,9 @@ def install_wan_latent_capture() -> None:
         previous_seed = getattr(self, "_viv_seed", None)
         previous_reuse_prefix = getattr(self, "_viv_reuse_latent_prefix", None)
         previous_reuse_predictions = getattr(self, "_viv_reuse_predictions", None)
+        previous_save_original_predictions = getattr(
+            self, "_viv_save_original_predictions", None
+        )
         previous_sigma_schedule_path = getattr(
             self, "_viv_sigma_schedule_path", None
         )
@@ -39,6 +43,9 @@ def install_wan_latent_capture() -> None:
         self._viv_seed = _seed_from_request(req)
         self._viv_reuse_latent_prefix = _reuse_prefix_from_request(req)
         self._viv_reuse_predictions = _reuse_predictions_from_request(req)
+        self._viv_save_original_predictions = (
+            _save_original_predictions_from_request(req)
+        )
         self._viv_sigma_schedule_path = _sigma_schedule_path_from_request(req)
         self._viv_sigma_schedule = None
         try:
@@ -53,6 +60,9 @@ def install_wan_latent_capture() -> None:
             self._viv_seed = previous_seed
             self._viv_reuse_latent_prefix = previous_reuse_prefix
             self._viv_reuse_predictions = previous_reuse_predictions
+            self._viv_save_original_predictions = (
+                previous_save_original_predictions
+            )
             self._viv_sigma_schedule_path = previous_sigma_schedule_path
             self._viv_sigma_schedule = previous_sigma_schedule
 
@@ -113,12 +123,13 @@ def install_wan_latent_capture() -> None:
         sigma_schedule = getattr(self, "_viv_sigma_schedule", None)
         if sigma_schedule is not None:
             sigma_schedule.append(sigma)
+        noise_pred_to_save = getattr(self, "_viv_noise_pred_to_save", noise_pred)
         _save_noise_pred(
             _denoising_step_latent_path_from_prefix(
                 getattr(self, "_viv_latent_prefix", None), step_idx
             ),
             "denoising_step",
-            noise_pred,
+            noise_pred_to_save,
             {
                 "seed": getattr(self, "_viv_seed", None),
                 "step_idx": step_idx,
@@ -152,6 +163,15 @@ def denoising_step_latent_paths(video_path: Path, num_inference_steps: int) -> l
         denoising_step_latent_path(video_path, step_idx)
         for step_idx in range(num_inference_steps)
     ]
+
+
+def saved_denoising_prediction_count(video_path: Path) -> int:
+    step_idx = 0
+    while True:
+        latent_path = denoising_step_latent_path(video_path, step_idx)
+        if not latent_path.exists():
+            return step_idx
+        step_idx += 1
 
 
 def load_latents(
@@ -343,6 +363,12 @@ def _reuse_predictions_from_request(req: Any) -> int | None:
     return int(count)
 
 
+def _save_original_predictions_from_request(req: Any) -> bool:
+    sampling_params = getattr(req, "sampling_params", None)
+    extra_args = getattr(sampling_params, "extra_args", None) or {}
+    return _truthy(extra_args.get(SAVE_ORIGINAL_PREDICTIONS_EXTRA_ARG))
+
+
 def _reuse_final_latent_from_request(req: Any) -> bool:
     sampling_params = getattr(req, "sampling_params", None)
     extra_args = getattr(sampling_params, "extra_args", None) or {}
@@ -405,6 +431,9 @@ def _diffuse_with_reused_denoising(
     first_frame_mask = values["first_frame_mask"]
 
     reuse_prefix = getattr(self, "_viv_reuse_latent_prefix", None)
+    save_original_predictions = bool(
+        getattr(self, "_viv_save_original_predictions", False)
+    )
     if reuse_prefix is None:
         raise ValueError("missing latent reuse source prefix")
     if reuse_predictions > len(timesteps):
@@ -425,7 +454,7 @@ def _diffuse_with_reused_denoising(
             self._current_timestep = t
             set_forward_context_denoise_step_idx(step_idx)
 
-            if step_idx < reuse_predictions:
+            if step_idx < reuse_predictions and not save_original_predictions:
                 latent_path = _denoising_step_latent_path_from_prefix(
                     reuse_prefix, step_idx
                 )
@@ -507,9 +536,34 @@ def _diffuse_with_reused_denoising(
                 cfg_normalize=False,
             )
 
-            latents = self.scheduler_step_maybe_with_cfg(
-                noise_pred, t, latents, do_true_cfg
-            )
+            step_noise_pred = noise_pred
+            step_do_true_cfg = do_true_cfg
+            if step_idx < reuse_predictions:
+                had_previous_noise_pred_to_save = hasattr(
+                    self, "_viv_noise_pred_to_save"
+                )
+                previous_noise_pred_to_save = getattr(
+                    self, "_viv_noise_pred_to_save", None
+                )
+                latent_path = _denoising_step_latent_path_from_prefix(
+                    reuse_prefix, step_idx
+                )
+                step_noise_pred = _load_noise_pred(
+                    latent_path, device=latents.device, dtype=dtype
+                )
+                step_do_true_cfg = False
+                self._viv_noise_pred_to_save = noise_pred
+
+            try:
+                latents = self.scheduler_step_maybe_with_cfg(
+                    step_noise_pred, t, latents, step_do_true_cfg
+                )
+            finally:
+                if step_idx < reuse_predictions:
+                    if had_previous_noise_pred_to_save:
+                        self._viv_noise_pred_to_save = previous_noise_pred_to_save
+                    else:
+                        del self._viv_noise_pred_to_save
             pbar.update()
 
     return latents

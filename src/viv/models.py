@@ -42,6 +42,8 @@ class LatentReuseConfig:
     source_dir: Path
     reuse_initial_latent: bool = False
     reuse_predictions: int | None = None
+    reuse_all_predictions: bool = False
+    save_original_predictions: bool = False
     reuse_final_latent: bool = False
 
 
@@ -55,6 +57,7 @@ class GenerationResult:
     initial_noise_latent_reused: bool = False
     final_noise_latent_reused: bool = False
     prediction_latents_reused: int = 0
+    original_prediction_latents_saved: bool = False
     generation_id: str = field(default_factory=_new_generation_id)
     reused_latents_from: str | None = None
 
