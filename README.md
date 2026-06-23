@@ -45,10 +45,13 @@ viv generate -p pilot --reuse-latents-from /workspace/previous-outputs \
   --reuse-prediction-latents 10 /workspace/outputs
 
 viv generate -p pilot --reuse-latents-from /workspace/previous-outputs \
+  --reuse-prediction-latents /workspace/outputs
+
+viv generate -p pilot --reuse-latents-from /workspace/previous-outputs \
   --reuse-final-latents /workspace/outputs
 ```
 
-If `--reuse-prediction-latents` is specified, then `--reuse-initial-latents` is enabled by default (because it makes no sense to reuse predictions without sharing the initial noise latent). It uses the first `COUNT` saved model predictions and their original sigmas for denoising, then compresses the remaining saved sigma trajectory into the new run's remaining steps with equal spacing in UniPC lambda space.
+If `--reuse-prediction-latents` is specified, then `--reuse-initial-latents` is enabled by default (because it makes no sense to reuse predictions without sharing the initial noise latent). With a `COUNT`, it uses the first `COUNT` saved model predictions and their original sigmas for denoising, then compresses the remaining saved sigma trajectory into the new run's remaining steps with equal spacing in UniPC lambda space. Without a `COUNT`, it reuses all saved prediction steps from the source generation.
 
 By default, reused prediction steps skip model inference and load the saved predictions directly. Add `--save-original-predictions` to still run model inference for reused steps and save the fresh prediction tensors for comparison; those fresh tensors are discarded after saving and the previously saved predictions are used to update the latent state:
 

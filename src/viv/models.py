@@ -42,6 +42,7 @@ class LatentReuseConfig:
     source_dir: Path
     reuse_initial_latent: bool = False
     reuse_predictions: int | None = None
+    reuse_all_predictions: bool = False
     save_original_predictions: bool = False
     reuse_final_latent: bool = False
 

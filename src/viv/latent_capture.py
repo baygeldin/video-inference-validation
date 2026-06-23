@@ -165,6 +165,15 @@ def denoising_step_latent_paths(video_path: Path, num_inference_steps: int) -> l
     ]
 
 
+def saved_denoising_prediction_count(video_path: Path) -> int:
+    step_idx = 0
+    while True:
+        latent_path = denoising_step_latent_path(video_path, step_idx)
+        if not latent_path.exists():
+            return step_idx
+        step_idx += 1
+
+
 def load_latents(
     latent_path: Path, device: Any | None = None, dtype: Any | None = None
 ) -> Any:
