@@ -15,6 +15,7 @@ def run(
     config_name: str,
     config: InferenceConfig,
     save_latents: bool = False,
+    save_prompt_embeds: bool = False,
     latent_reuse: LatentReuseConfig | None = None,
 ) -> None:
     prompts = load_prompts(prompts_path)
@@ -30,7 +31,10 @@ def run(
         flush=True,
     )
     generator = OfflineVideoGenerator(
-        config, save_latents=save_latents, latent_reuse=latent_reuse
+        config,
+        save_latents=save_latents,
+        save_prompt_embeds=save_prompt_embeds,
+        latent_reuse=latent_reuse,
     )
     environment = collect_environment_metadata()
     for prompt in prompts:
