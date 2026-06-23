@@ -35,10 +35,7 @@ Latent capture is disabled by default. Use `--save-latents` to also write the in
 viv generate -p pilot --save-latents /workspace/outputs
 ```
 
-Saved tensors can be reused by pointing at the folder that contains files named
-like `<id>.initial_noise_latent.safetensors`,
-`<id>.denoising_step_0.safetensors`, and
-`<id>.final_noise_latent.safetensors`:
+Saved tensors can be reused by pointing at the folder that contains files named like `<id>.initial_noise_latent.safetensors`, `<id>.denoising_step_0.safetensors`, and `<id>.final_noise_latent.safetensors`:
 
 ```bash
 viv generate -p pilot --reuse-latents-from /workspace/previous-outputs \
@@ -47,18 +44,24 @@ viv generate -p pilot --reuse-latents-from /workspace/previous-outputs \
 viv generate -p pilot --reuse-latents-from /workspace/previous-outputs \
   --reuse-prediction-latents 10 /workspace/outputs
 
-viv generate -p pilot --save-latents \
-  --reuse-latents-from /workspace/previous-outputs \
-  --reuse-prediction-latents 10 \
-  --save-original-predictions /workspace/outputs
-
 viv generate -p pilot --reuse-latents-from /workspace/previous-outputs \
   --reuse-final-latents /workspace/outputs
 ```
 
 If `--reuse-prediction-latents` is specified, then `--reuse-initial-latents` is enabled by default (because it makes no sense to reuse predictions without sharing the initial noise latent). It uses the first `COUNT` saved model predictions and their original sigmas for denoising, then compresses the remaining saved sigma trajectory into the new run's remaining steps with equal spacing in UniPC lambda space.
 
-By default, reused prediction steps skip model inference and load the saved predictions directly. Add `--save-original-predictions` with `--save-latents` to still run model inference for reused steps and save the fresh prediction tensors for comparison; those fresh tensors are discarded after saving and the previously saved predictions are used to update the latent state.
+By default, reused prediction steps skip model inference and load the saved predictions directly. Add `--save-original-predictions` to still run model inference for reused steps and save the fresh prediction tensors for comparison; those fresh tensors are discarded after saving and the previously saved predictions are used to update the latent state:
+
+```bash
+viv generate -p pilot \
+  --save-latents \
+  --save-original-predictions \
+  --reuse-latents-from /workspace/previous-outputs \
+  --reuse-prediction-latents 10 \
+  /workspace/outputs
+```
+
+## Output
 
 The script runs offline inference through vLLM-Omni and writes:
 ```text
@@ -117,9 +120,9 @@ Notes about some of the fields:
 - `sigma_schedule` records the actual sigma value used for each denoising step
 - `original_prediction_latents_saved` records whether reused prediction steps ran fresh model inference and saved those fresh predictions
 
-Saved latent runs can be compared with `viv compare`. The command writes
-`comparison.json` in the output folder and includes only prompt IDs that are
-present in the baseline and every compared generation:
+## Analysis
+
+Saved latent runs can be compared with `viv compare`. The command writes `comparison.json` in the output folder and includes only prompt IDs that are present in the baseline and every compared generation:
 
 ```bash
 viv compare \
