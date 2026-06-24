@@ -152,11 +152,6 @@ class OfflineVideoGenerator:
         prompt_embeds_sha256 = None
         negative_prompt_embeds_sha256 = None
         if latents is not None:
-            if reuse_initial_latent and reuse_prefix is not None:
-                initial_latent_path = initial_noise_latent_path(reuse_prefix)
-                initial_latent_sha256 = safetensors_sha256_metadata(
-                    initial_latent_path
-                )
             if (
                 self.save_initial_latents
                 and not (reuse_initial_latent and skip_reused_computation)
@@ -242,12 +237,6 @@ class OfflineVideoGenerator:
                     f"latent: {final_latent_path}"
                 )
             final_latent_sha256 = safetensors_sha256_metadata(final_latent_path)
-        elif reuse_final_latent:
-            if reuse_prefix is None:
-                raise ValueError("missing latent reuse source prefix")
-            final_latent_sha256 = safetensors_sha256_metadata(
-                final_noise_latent_path(reuse_prefix)
-            )
         else:
             final_latent_sha256 = None
         prompt_embeds_saved = self.save_prompt_embeds and not (
@@ -263,13 +252,6 @@ class OfflineVideoGenerator:
                 prompt_embeds_sha256,
                 negative_prompt_embeds_sha256,
             ) = prompt_embeddings_sha256_metadata(prompt_embeds_path)
-        elif reuse_prompt_embeds:
-            if reuse_prefix is None:
-                raise ValueError("missing prompt embedding reuse source prefix")
-            (
-                prompt_embeds_sha256,
-                negative_prompt_embeds_sha256,
-            ) = prompt_embeddings_sha256_metadata(prompt_embeddings_path(reuse_prefix))
         return GenerationResult(
             seed=seed,
             duration_seconds=time.perf_counter() - started_at,

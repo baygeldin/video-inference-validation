@@ -64,7 +64,7 @@ viv generate -p pilot \
 
 If `--reuse-prediction-latents` is specified, then `--reuse-initial-latents` is enabled by default (because it makes no sense to reuse predictions without sharing the initial noise latent). With a `COUNT`, it uses the first `COUNT` saved model predictions and their original sigmas for denoising, then compresses the remaining saved sigma trajectory into the new run's remaining steps with equal spacing in UniPC lambda space. Without a `COUNT`, it reuses all saved prediction steps from the source generation.
 
-By default, reused artifacts still run their corresponding computation so save flags capture fresh tensors for comparison. Fresh initial latents, prompt embeddings, prediction tensors, and final latents are discarded after saving when their reused counterparts are selected for generation. Add `--skip-reused-computation` to load reused tensors directly; reused computation is not rerun, and copied tensors for those reused artifacts are not written to the output folder:
+By default, reused artifacts still run their corresponding computation so save flags capture fresh tensors for later comparison. Fresh initial latents, prompt embeddings, prediction tensors, and final latents are discarded after saving and calculating their checksums, and their reused counterparts are selected for further generation instead. Add `--skip-reused-computation` skip replaying computation for reused parts of the generation pipeline:
 
 ```bash
 viv generate -p pilot \
@@ -102,7 +102,7 @@ When enabled, tensor capture also writes files such as:
 The JSON sidecar records the generation parameters and runtime environment:
 ```jsonc
 {
-  "generation_id": "PrDYmJfK", // short random identifier for the run
+  "generation_id": "PrDYmJfK", // Short random identifier for the run
   "timestamp": "2026-06-02T11:36:05.916536+00:00",
   "duration_seconds": 415.33602340100333,
   "config_name": "default",
@@ -174,7 +174,7 @@ The JSON sidecar records the generation parameters and runtime environment:
       0.28841710090637207,
       0.20829857885837555,
       0.11361567676067352
-    ] // actual sigma values used for each denoising step
+    ] // Actual sigma values used for each denoising step
   },
   "environment": {
     "gpu_model": "NVIDIA H100 80GB HBM3",
@@ -188,11 +188,11 @@ The JSON sidecar records the generation parameters and runtime environment:
     "python_version": "3.13.11 (main, Jan 28 2026, 00:01:45) [Clang 21.1.4 ]",
     "image_name": "viv:runpod-cu130"
   },
-  "checksums": {
-    "prompt_embeds_sha256": null,
-    "negative_prompt_embeds_sha256": null,
-    "initial_noise_latent_sha256": null,
-    "final_noise_latent_sha256": null
+  "checksums": { // Checksums of this run's saved artifacts
+    "prompt_embeds_sha256": "240c0423e4fadd092fb5ea2f9f7b447ccf68b8100e3d9bf85c137d324374bd1f",
+    "negative_prompt_embeds_sha256": "16519678367ef0a3863dc0eff20945e106a8e812b425054e709f3062009d9a81",
+    "initial_noise_latent_sha256": "980eaf0a67d5d9de2c386cebe874d0f8dbe05103d7b76fdf49e59d02185f7807",
+    "final_noise_latent_sha256": "3d5af30e660bbdb1dfd4b04052b6f94ea7b21792f8ce89112ae95d4552584460"
   }
 }
 ```
