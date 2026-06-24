@@ -138,13 +138,11 @@ class OfflineVideoGenerator:
             latents = load_latents(initial_noise_latent_path(reuse_prefix))
         else:
             latents = generated_initial_latents
-        reused_latents_from = _reused_latents_generation_id(
+        reused_from = _reused_generation_id(
             reuse_prefix,
             reuse_initial_latent=reuse_initial_latent,
             reuse_final_latent=reuse_final_latent,
-        )
-        reused_prompt_embeds_from = _reused_prompt_embeds_generation_id(
-            reuse_prefix,
+            reuse_predictions=reuse_predictions,
             reuse_prompt_embeds=reuse_prompt_embeds,
         )
 
@@ -284,8 +282,7 @@ class OfflineVideoGenerator:
             final_noise_latent_reused=reuse_final_latent,
             prediction_latents_reused=reused_prediction_latents,
             prompt_embeds_reused=reuse_prompt_embeds,
-            reused_latents_from=reused_latents_from,
-            reused_prompt_embeds_from=reused_prompt_embeds_from,
+            reused_from=reused_from,
         )
 
 
@@ -331,23 +328,20 @@ def _latent_reuse_prefix(
     return latent_reuse.source_dir / video_path.with_suffix("").name
 
 
-def _reused_latents_generation_id(
+def _reused_generation_id(
     reuse_prefix: Path | None,
     *,
     reuse_initial_latent: bool,
     reuse_final_latent: bool,
-) -> str | None:
-    if reuse_prefix is None or not (reuse_initial_latent or reuse_final_latent):
-        return None
-    return read_sidecar_generation_id(reuse_prefix.with_suffix(".json"))
-
-
-def _reused_prompt_embeds_generation_id(
-    reuse_prefix: Path | None,
-    *,
+    reuse_predictions: int | None,
     reuse_prompt_embeds: bool,
 ) -> str | None:
-    if reuse_prefix is None or not reuse_prompt_embeds:
+    if reuse_prefix is None or not (
+        reuse_initial_latent
+        or reuse_final_latent
+        or reuse_predictions is not None
+        or reuse_prompt_embeds
+    ):
         return None
     return read_sidecar_generation_id(reuse_prefix.with_suffix(".json"))
 

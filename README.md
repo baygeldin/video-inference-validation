@@ -159,8 +159,7 @@ The JSON sidecar records the generation parameters and runtime environment:
   "final_noise_latent_reused": false,
   "prediction_latents_reused": 0,
   "prompt_embeds_reused": false,
-  "reused_latents_from": null, // `generation_id` of the source generation
-  "reused_prompt_embeds_from": null,
+  "reused_from": null, // `generation_id` of the source generation
   "height": 480,
   "width": 832,
   "fps": 16,
