@@ -205,11 +205,17 @@ Saved latent runs can be compared with `viv compare`. The command writes a JSON 
 viv compare \
   --output /workspace/comparison.json \
   --baseline /workspace/baseline-outputs \
+  --final-latents \
+  --video-files \
+  --predictions \
   /workspace/experiment-a \
   /workspace/experiment-b
 ```
 
-Comparison reports RMSE and relative L2 error for each final latent tensor, mean/min/max RMSE and relative L2 error across matching denoising prediction latents, per-step prediction drift metrics, and mean/min/max per-frame SSIM for each generated video file.
+Add one or more comparison flags to choose what the report contains:
+- `--final-latents` reports RMSE and relative L2 error for each final latent tensor.
+- `--video-files` reports mean/min/max per-frame SSIM for each generated video file.
+- `--predictions` reports mean/min/max RMSE and relative L2 error across matching denoising prediction latents plus per-step prediction drift metrics.
 
 ```json
 {

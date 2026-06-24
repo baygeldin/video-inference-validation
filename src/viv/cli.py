@@ -37,7 +37,7 @@ def main(argv: list[str] | None = None) -> int:
         allow_abbrev=False,
     )
     _add_compare_arguments(compare_parser)
-    compare_parser.set_defaults(handler=_run_compare)
+    compare_parser.set_defaults(handler=_run_compare, parser=compare_parser)
 
     args = parser.parse_args(_normalize_optional_reuse_prediction_count(argv))
     return args.handler(args)
@@ -254,6 +254,21 @@ def _add_compare_arguments(parser: argparse.ArgumentParser) -> None:
         help="Generation folder to use as the comparison baseline",
     )
     parser.add_argument(
+        "--final-latents",
+        action="store_true",
+        help="Compare final noise latent tensors",
+    )
+    parser.add_argument(
+        "--video-files",
+        action="store_true",
+        help="Compare generated video files with per-frame SSIM",
+    )
+    parser.add_argument(
+        "--predictions",
+        action="store_true",
+        help="Compare denoising step prediction latent tensors",
+    )
+    parser.add_argument(
         "generation_dirs",
         nargs="+",
         type=Path,
@@ -262,11 +277,20 @@ def _add_compare_arguments(parser: argparse.ArgumentParser) -> None:
 
 
 def _run_compare(args: argparse.Namespace) -> int:
+    if not (args.final_latents or args.video_files or args.predictions):
+        args.parser.error(
+            "at least one of --final-latents, --video-files, or --predictions "
+            "is required"
+        )
+
     try:
         output_path = compare_generations(
             args.output_path,
             args.baseline_dir,
             args.generation_dirs,
+            final_latents=args.final_latents,
+            video_files=args.video_files,
+            predictions=args.predictions,
         )
     except Exception as exc:
         print(f"viv compare: error: {exc}", file=sys.stderr)

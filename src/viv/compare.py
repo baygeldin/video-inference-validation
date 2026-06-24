@@ -29,8 +29,8 @@ class GenerationArtifacts:
 
 @dataclass(frozen=True)
 class ExampleArtifacts:
-    final_latent_path: Path
-    video_path: Path
+    final_latent_path: Path | None
+    video_path: Path | None
     prediction_latent_paths: dict[int, Path]
 
 
@@ -41,18 +41,42 @@ class VideoInfo:
     frame_count: int
 
 
+@dataclass(frozen=True)
+class ComparisonOptions:
+    final_latents: bool = True
+    video_files: bool = True
+    predictions: bool = True
+
+    def any_enabled(self) -> bool:
+        return self.final_latents or self.video_files or self.predictions
+
+
 def compare_generations(
     output_path: Path,
     baseline_dir: Path,
     generation_dirs: list[Path],
+    *,
+    final_latents: bool = True,
+    video_files: bool = True,
+    predictions: bool = True,
 ) -> Path:
     if not generation_dirs:
         raise ValueError("at least one generation path is required")
     if output_path.exists() and output_path.is_dir():
         raise ValueError(f"{output_path} is a directory; expected a JSON file path")
 
-    baseline = _read_generation_artifacts(baseline_dir)
-    generations = [_read_generation_artifacts(path) for path in generation_dirs]
+    options = ComparisonOptions(
+        final_latents=final_latents,
+        video_files=video_files,
+        predictions=predictions,
+    )
+    if not options.any_enabled():
+        raise ValueError("at least one comparison type must be enabled")
+
+    baseline = _read_generation_artifacts(baseline_dir, options)
+    generations = [
+        _read_generation_artifacts(path, options) for path in generation_dirs
+    ]
     common_prompt_ids = sorted(
         set.intersection(
             set(baseline.examples),
@@ -70,21 +94,12 @@ def compare_generations(
                 "gpu_model": generation.gpu_model,
                 "config_name": generation.config_name,
                 "examples": [
-                    {
-                        "prompt_id": prompt_id,
-                        "video_file": _video_file_metrics(
-                            baseline.examples[prompt_id].video_path,
-                            generation.examples[prompt_id].video_path,
-                        ),
-                        "final_latent": _latent_metrics(
-                            baseline.examples[prompt_id].final_latent_path,
-                            generation.examples[prompt_id].final_latent_path,
-                        ),
-                        "predictions": _prediction_metrics(
-                            baseline.examples[prompt_id].prediction_latent_paths,
-                            generation.examples[prompt_id].prediction_latent_paths,
-                        ),
-                    }
+                    _example_comparison(
+                        prompt_id,
+                        baseline.examples[prompt_id],
+                        generation.examples[prompt_id],
+                        options,
+                    )
                     for prompt_id in common_prompt_ids
                 ],
             }
@@ -101,7 +116,10 @@ def compare_generations(
     return output_path
 
 
-def _read_generation_artifacts(generation_dir: Path) -> GenerationArtifacts:
+def _read_generation_artifacts(
+    generation_dir: Path,
+    options: ComparisonOptions,
+) -> GenerationArtifacts:
     if not generation_dir.is_dir():
         raise ValueError(f"{generation_dir} is not a directory")
 
@@ -128,14 +146,22 @@ def _read_generation_artifacts(generation_dir: Path) -> GenerationArtifacts:
 
         final_latent_path = generation_dir / f"{prompt_id}{FINAL_LATENT_SUFFIX}"
         video_path = generation_dir / f"{prompt_id}{VIDEO_SUFFIX}"
-        if final_latent_path.exists() and video_path.exists():
+        prediction_latent_paths = _prediction_latent_paths(
+            generation_dir,
+            prompt_id,
+        )
+        if _has_requested_artifacts(
+            final_latent_path,
+            video_path,
+            prediction_latent_paths,
+            options,
+        ):
             examples[prompt_id] = ExampleArtifacts(
-                final_latent_path=final_latent_path,
-                video_path=video_path,
-                prediction_latent_paths=_prediction_latent_paths(
-                    generation_dir,
-                    prompt_id,
+                final_latent_path=(
+                    final_latent_path if final_latent_path.exists() else None
                 ),
+                video_path=video_path if video_path.exists() else None,
+                prediction_latent_paths=prediction_latent_paths,
             )
 
     if len(config_names) != 1:
@@ -150,7 +176,8 @@ def _read_generation_artifacts(generation_dir: Path) -> GenerationArtifacts:
         )
     if not examples:
         raise ValueError(
-            f"{generation_dir} does not contain comparable final latent and video files"
+            f"{generation_dir} does not contain comparable artifacts for the "
+            "selected comparison types"
         )
 
     return GenerationArtifacts(
@@ -158,6 +185,53 @@ def _read_generation_artifacts(generation_dir: Path) -> GenerationArtifacts:
         config_name=next(iter(config_names)),
         examples=examples,
     )
+
+
+def _has_requested_artifacts(
+    final_latent_path: Path,
+    video_path: Path,
+    prediction_latent_paths: dict[int, Path],
+    options: ComparisonOptions,
+) -> bool:
+    if options.final_latents and not final_latent_path.exists():
+        return False
+    if options.video_files and not video_path.exists():
+        return False
+    if options.predictions and not prediction_latent_paths:
+        return False
+    return True
+
+
+def _example_comparison(
+    prompt_id: str,
+    baseline: ExampleArtifacts,
+    generation: ExampleArtifacts,
+    options: ComparisonOptions,
+) -> dict[str, Any]:
+    metrics: dict[str, Any] = {"prompt_id": prompt_id}
+    if options.video_files:
+        if baseline.video_path is None or generation.video_path is None:
+            raise ValueError(f"missing video file for prompt {prompt_id}")
+        metrics["video_file"] = _video_file_metrics(
+            baseline.video_path,
+            generation.video_path,
+        )
+    if options.final_latents:
+        if (
+            baseline.final_latent_path is None
+            or generation.final_latent_path is None
+        ):
+            raise ValueError(f"missing final latent for prompt {prompt_id}")
+        metrics["final_latent"] = _latent_metrics(
+            baseline.final_latent_path,
+            generation.final_latent_path,
+        )
+    if options.predictions:
+        metrics["predictions"] = _prediction_metrics(
+            baseline.prediction_latent_paths,
+            generation.prediction_latent_paths,
+        )
+    return metrics
 
 
 def _read_metadata(metadata_path: Path) -> dict[str, Any]:
