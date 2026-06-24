@@ -256,7 +256,7 @@ def _metadata_string(
 def _latent_metrics(
     baseline_path: Path,
     generation_path: Path,
-) -> dict[str, float]:
+) -> dict[str, Any]:
     import torch
 
     baseline = _load_latent_tensor(baseline_path)
@@ -271,13 +271,12 @@ def _latent_metrics(
     diff = generation - baseline
     abs_diff = torch.abs(diff)
     rmse = torch.sqrt(torch.mean(torch.square(diff))).item()
-    mean_abs_error = torch.mean(abs_diff).item()
-    max_abs_error = torch.max(abs_diff).item()
     baseline_norm = torch.linalg.vector_norm(baseline).item()
     generation_norm = torch.linalg.vector_norm(generation).item()
     diff_norm = torch.linalg.vector_norm(diff).item()
     baseline_l1_norm = torch.sum(torch.abs(baseline)).item()
     diff_l1_norm = torch.sum(abs_diff).item()
+    baseline_std = torch.std(baseline).item()
     if baseline_norm == 0.0:
         relative_l2_error = 0.0 if diff_norm == 0.0 else math.inf
     else:
@@ -302,27 +301,186 @@ def _latent_metrics(
         raise ValueError(
             f"cosine similarity is not finite for {generation_path.name}"
         )
-    changed_fraction = torch.count_nonzero(diff).item() / baseline.numel()
-    baseline_std = torch.std(baseline).item()
-    generation_std = torch.std(generation).item()
-    if baseline_std == 0.0:
-        relative_std_delta = 0.0 if generation_std == 0.0 else math.inf
-    else:
-        relative_std_delta = abs(generation_std - baseline_std) / baseline_std
-    if not math.isfinite(relative_std_delta):
-        raise ValueError(
-            f"relative std delta is not finite for {generation_path.name}"
-        )
+    nrmse = _normalized_rmse(rmse, baseline_std, generation_path)
+    sqnr_db = _sqnr_db(baseline, diff)
+    pearson_correlation = _pearson_correlation(baseline, generation)
+    per_channel = _per_channel_metrics(baseline, generation, diff)
     return {
         "rmse": rmse,
-        "mean_abs_error": mean_abs_error,
-        "max_abs_error": max_abs_error,
         "relative_l1_error": relative_l1_error,
         "relative_l2_error": relative_l2_error,
         "cosine_similarity": cosine_similarity,
-        "changed_fraction": changed_fraction,
-        "relative_std_delta": relative_std_delta,
+        "sqnr_db": sqnr_db,
+        "pearson_correlation": pearson_correlation,
+        "nrmse": nrmse,
+        **per_channel,
     }
+
+
+def _normalized_rmse(
+    rmse: float,
+    baseline_std: float,
+    generation_path: Path,
+) -> float:
+    if baseline_std == 0.0:
+        nrmse = 0.0 if rmse == 0.0 else math.inf
+    else:
+        nrmse = rmse / baseline_std
+    if not math.isfinite(nrmse):
+        raise ValueError(f"NRMSE is not finite for {generation_path.name}")
+    return nrmse
+
+
+def _sqnr_db(baseline: "torch.Tensor", diff: "torch.Tensor") -> float | None:
+    import torch
+
+    signal_power = torch.sum(torch.square(baseline)).item()
+    noise_power = torch.sum(torch.square(diff)).item()
+    if signal_power <= 0.0 or noise_power <= 0.0:
+        return None
+    return 10.0 * math.log10(signal_power / noise_power)
+
+
+def _pearson_correlation(
+    baseline: "torch.Tensor",
+    generation: "torch.Tensor",
+) -> float:
+    import torch
+
+    baseline_centered = baseline - torch.mean(baseline)
+    generation_centered = generation - torch.mean(generation)
+    baseline_norm = torch.linalg.vector_norm(baseline_centered).item()
+    generation_norm = torch.linalg.vector_norm(generation_centered).item()
+    if baseline_norm == 0.0 or generation_norm == 0.0:
+        raw_diff_norm = torch.linalg.vector_norm(generation - baseline).item()
+        if raw_diff_norm == 0.0:
+            return 1.0
+        raise ValueError("Pearson correlation is undefined for a constant tensor")
+    correlation = (
+        torch.sum(baseline_centered * generation_centered).item()
+        / (baseline_norm * generation_norm)
+    )
+    correlation = max(-1.0, min(1.0, correlation))
+    if not math.isfinite(correlation):
+        raise ValueError("Pearson correlation is not finite")
+    return correlation
+
+
+def _per_channel_metrics(
+    baseline: "torch.Tensor",
+    generation: "torch.Tensor",
+    diff: "torch.Tensor",
+) -> dict[str, Any]:
+    import torch
+
+    if baseline.ndim < 2:
+        return {}
+
+    baseline_by_channel = baseline.transpose(0, 1).reshape(baseline.shape[1], -1)
+    generation_by_channel = generation.transpose(0, 1).reshape(
+        generation.shape[1], -1
+    )
+    diff_by_channel = diff.transpose(0, 1).reshape(diff.shape[1], -1)
+
+    baseline_norms = torch.linalg.vector_norm(baseline_by_channel, dim=1)
+    generation_norms = torch.linalg.vector_norm(generation_by_channel, dim=1)
+    diff_norms = torch.linalg.vector_norm(diff_by_channel, dim=1)
+    relative_l2_errors = _safe_divide_zero_equal(diff_norms, baseline_norms)
+
+    dot_products = torch.sum(baseline_by_channel * generation_by_channel, dim=1)
+    cosine_similarities = []
+    for idx in range(baseline_by_channel.shape[0]):
+        baseline_norm = baseline_norms[idx].item()
+        generation_norm = generation_norms[idx].item()
+        diff_norm = diff_norms[idx].item()
+        if baseline_norm == 0.0 or generation_norm == 0.0:
+            value = 1.0 if diff_norm == 0.0 else math.nan
+        else:
+            value = dot_products[idx].item() / (baseline_norm * generation_norm)
+            value = max(-1.0, min(1.0, value))
+        if not math.isfinite(value):
+            raise ValueError("per-channel cosine similarity is not finite")
+        cosine_similarities.append(value)
+
+    rmses = torch.sqrt(torch.mean(torch.square(diff_by_channel), dim=1))
+    baseline_stds = torch.std(baseline_by_channel, dim=1)
+    nrmse_values = _safe_divide_zero_equal(rmses, baseline_stds)
+
+    sqnr_values = [
+        _sqnr_db(baseline_by_channel[idx], diff_by_channel[idx])
+        for idx in range(baseline_by_channel.shape[0])
+    ]
+    pearson_values = [
+        _pearson_correlation(
+            baseline_by_channel[idx],
+            generation_by_channel[idx],
+        )
+        for idx in range(baseline_by_channel.shape[0])
+    ]
+
+    relative_l2 = _tensor_to_float_list(relative_l2_errors)
+    nrmse = _tensor_to_float_list(nrmse_values)
+    return {
+        "per_channel_relative_l2_error": relative_l2,
+        "mean_per_channel_relative_l2_error": sum(relative_l2) / len(relative_l2),
+        "rms_per_channel_relative_l2_error": _rms(relative_l2),
+        "max_per_channel_relative_l2_error": max(relative_l2),
+        "per_channel_cosine_similarity": cosine_similarities,
+        "mean_per_channel_cosine_similarity": (
+            sum(cosine_similarities) / len(cosine_similarities)
+        ),
+        "min_per_channel_cosine_similarity": min(cosine_similarities),
+        "per_channel_sqnr_db": sqnr_values,
+        "mean_per_channel_sqnr_db": _mean_optional(sqnr_values),
+        "min_per_channel_sqnr_db": _min_optional(sqnr_values),
+        "per_channel_pearson_correlation": pearson_values,
+        "mean_per_channel_pearson_correlation": (
+            sum(pearson_values) / len(pearson_values)
+        ),
+        "min_per_channel_pearson_correlation": min(pearson_values),
+        "per_channel_nrmse": nrmse,
+        "mean_per_channel_nrmse": sum(nrmse) / len(nrmse),
+        "rms_per_channel_nrmse": _rms(nrmse),
+        "max_per_channel_nrmse": max(nrmse),
+    }
+
+
+def _safe_divide_zero_equal(
+    numerator: "torch.Tensor",
+    denominator: "torch.Tensor",
+) -> "torch.Tensor":
+    import torch
+
+    return torch.where(
+        denominator == 0.0,
+        torch.where(numerator == 0.0, torch.zeros_like(numerator), torch.inf),
+        numerator / denominator,
+    )
+
+
+def _tensor_to_float_list(values: "torch.Tensor") -> list[float]:
+    output = [float(value) for value in values.tolist()]
+    if not all(math.isfinite(value) for value in output):
+        raise ValueError("per-channel metric contains non-finite values")
+    return output
+
+
+def _rms(values: list[float]) -> float:
+    return math.sqrt(sum(value * value for value in values) / len(values))
+
+
+def _mean_optional(values: list[float | None]) -> float | None:
+    finite_values = [value for value in values if value is not None]
+    if not finite_values:
+        return None
+    return sum(finite_values) / len(finite_values)
+
+
+def _min_optional(values: list[float | None]) -> float | None:
+    finite_values = [value for value in values if value is not None]
+    if not finite_values:
+        return None
+    return min(finite_values)
 
 
 def _prediction_metrics(
@@ -338,8 +496,6 @@ def _prediction_metrics(
         metrics = _latent_metrics(baseline_paths[step], generation_paths[step])
         step_metrics.append({"step_idx": step, **metrics})
     rmses = [metrics["rmse"] for metrics in step_metrics]
-    mean_abs_errors = [metrics["mean_abs_error"] for metrics in step_metrics]
-    max_abs_errors = [metrics["max_abs_error"] for metrics in step_metrics]
     relative_l1_errors = [
         metrics["relative_l1_error"] for metrics in step_metrics
     ]
@@ -349,24 +505,33 @@ def _prediction_metrics(
     cosine_similarities = [
         metrics["cosine_similarity"] for metrics in step_metrics
     ]
-    changed_fractions = [
-        metrics["changed_fraction"] for metrics in step_metrics
+    sqnr_dbs = [metrics["sqnr_db"] for metrics in step_metrics]
+    pearson_correlations = [
+        metrics["pearson_correlation"] for metrics in step_metrics
     ]
-    relative_std_deltas = [
-        metrics["relative_std_delta"] for metrics in step_metrics
-    ]
+    nrmse_values = [metrics["nrmse"] for metrics in step_metrics]
+    mean_per_channel_relative_l2_errors = _metric_values(
+        step_metrics, "mean_per_channel_relative_l2_error"
+    )
+    rms_per_channel_relative_l2_errors = _metric_values(
+        step_metrics, "rms_per_channel_relative_l2_error"
+    )
+    mean_per_channel_cosine_similarities = _metric_values(
+        step_metrics, "mean_per_channel_cosine_similarity"
+    )
+    mean_per_channel_sqnr_dbs = _optional_metric_values(
+        step_metrics, "mean_per_channel_sqnr_db"
+    )
+    mean_per_channel_pearson_correlations = _metric_values(
+        step_metrics, "mean_per_channel_pearson_correlation"
+    )
+    mean_per_channel_nrmse_values = _metric_values(
+        step_metrics, "mean_per_channel_nrmse"
+    )
     return {
         "mean_rmse": sum(rmses) / len(rmses),
         "min_rmse": min(rmses),
         "max_rmse": max(rmses),
-        "mean_mean_abs_error": (
-            sum(mean_abs_errors) / len(mean_abs_errors)
-        ),
-        "min_mean_abs_error": min(mean_abs_errors),
-        "max_mean_abs_error": max(mean_abs_errors),
-        "mean_max_abs_error": sum(max_abs_errors) / len(max_abs_errors),
-        "min_max_abs_error": min(max_abs_errors),
-        "max_max_abs_error": max(max_abs_errors),
         "mean_relative_l1_error": (
             sum(relative_l1_errors) / len(relative_l1_errors)
         ),
@@ -382,18 +547,56 @@ def _prediction_metrics(
         ),
         "min_cosine_similarity": min(cosine_similarities),
         "max_cosine_similarity": max(cosine_similarities),
-        "mean_changed_fraction": (
-            sum(changed_fractions) / len(changed_fractions)
+        "mean_sqnr_db": _mean_optional(sqnr_dbs),
+        "min_sqnr_db": _min_optional(sqnr_dbs),
+        "mean_pearson_correlation": (
+            sum(pearson_correlations) / len(pearson_correlations)
         ),
-        "min_changed_fraction": min(changed_fractions),
-        "max_changed_fraction": max(changed_fractions),
-        "mean_relative_std_delta": (
-            sum(relative_std_deltas) / len(relative_std_deltas)
+        "min_pearson_correlation": min(pearson_correlations),
+        "max_pearson_correlation": max(pearson_correlations),
+        "mean_nrmse": sum(nrmse_values) / len(nrmse_values),
+        "min_nrmse": min(nrmse_values),
+        "max_nrmse": max(nrmse_values),
+        "mean_per_channel_relative_l2_error": (
+            sum(mean_per_channel_relative_l2_errors)
+            / len(mean_per_channel_relative_l2_errors)
         ),
-        "min_relative_std_delta": min(relative_std_deltas),
-        "max_relative_std_delta": max(relative_std_deltas),
+        "mean_rms_per_channel_relative_l2_error": (
+            sum(rms_per_channel_relative_l2_errors)
+            / len(rms_per_channel_relative_l2_errors)
+        ),
+        "mean_per_channel_cosine_similarity": (
+            sum(mean_per_channel_cosine_similarities)
+            / len(mean_per_channel_cosine_similarities)
+        ),
+        "mean_per_channel_sqnr_db": _mean_optional(
+            mean_per_channel_sqnr_dbs
+        ),
+        "mean_per_channel_pearson_correlation": (
+            sum(mean_per_channel_pearson_correlations)
+            / len(mean_per_channel_pearson_correlations)
+        ),
+        "mean_per_channel_nrmse": (
+            sum(mean_per_channel_nrmse_values)
+            / len(mean_per_channel_nrmse_values)
+        ),
         "steps": step_metrics,
     }
+
+
+def _metric_values(
+    step_metrics: list[dict[str, Any]],
+    key: str,
+) -> list[float]:
+    values = [metrics[key] for metrics in step_metrics if key in metrics]
+    return [float(value) for value in values]
+
+
+def _optional_metric_values(
+    step_metrics: list[dict[str, Any]],
+    key: str,
+) -> list[float | None]:
+    return [metrics[key] for metrics in step_metrics if key in metrics]
 
 
 def _prediction_latent_paths(generation_dir: Path, prompt_id: str) -> dict[int, Path]:
