@@ -61,6 +61,7 @@ class GenerationResult:
     final_noise_latent_reused: bool = False
     prediction_latents_reused: int = 0
     prompt_embeds_reused: bool = False
+    skipped_reused_computation: bool = False
     generation_id: str = field(default_factory=_new_generation_id)
     reused_from: str | None = None
 

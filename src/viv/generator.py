@@ -282,6 +282,7 @@ class OfflineVideoGenerator:
             final_noise_latent_reused=reuse_final_latent,
             prediction_latents_reused=reused_prediction_latents,
             prompt_embeds_reused=reuse_prompt_embeds,
+            skipped_reused_computation=skip_reused_computation,
             reused_from=reused_from,
         )
 
