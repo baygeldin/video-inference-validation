@@ -126,7 +126,10 @@ def _add_generate_arguments(parser: argparse.ArgumentParser) -> None:
         "--reuse-final-latents",
         dest="reuse_final_latent",
         action="store_true",
-        help="Decode the saved final latent directly, skipping prompt encoding and denoising",
+        help=(
+            "After denoising and artifact capture, decode the saved final "
+            "latent from --reuse-from"
+        ),
     )
     parser.add_argument("output_dir", type=Path, help="Output folder path")
 
@@ -153,17 +156,6 @@ def _run_generate(args: argparse.Namespace) -> int:
     )
     if reuse_requested and args.reuse_from is None:
         parser.error("--reuse-from is required when reusing saved tensors")
-    if args.reuse_final_latent and (
-        args.reuse_initial_latent or reuse_predictions_requested
-    ):
-        parser.error("--reuse-final-latents cannot be combined with other reuse modes")
-    if args.reuse_final_latent and (
-        args.save_prompt_embeds or args.reuse_prompt_embeds
-    ):
-        parser.error(
-            "--reuse-final-latents cannot be combined with prompt embedding "
-            "capture or reuse"
-        )
     if isinstance(args.reuse_predictions, int) and args.reuse_predictions < 0:
         parser.error("--reuse-prediction-latents must be a non-negative integer")
     if args.skip_reused_steps and not reuse_predictions_requested:

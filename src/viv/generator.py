@@ -113,13 +113,11 @@ class OfflineVideoGenerator:
         reuse_prompt_embeds = (
             self.latent_reuse is not None
             and self.latent_reuse.reuse_prompt_embeds
-            and not reuse_final_latent
         )
-        initial_latent_reused = reuse_initial_latent and not reuse_final_latent
+        initial_latent_reused = reuse_initial_latent
         reuse_predictions = (
             _resolve_reuse_prediction_count(self.latent_reuse, reuse_prefix)
-            if not reuse_final_latent
-            and self.latent_reuse is not None
+            if self.latent_reuse is not None
             and (
                 self.latent_reuse.reuse_predictions is not None
                 or self.latent_reuse.reuse_all_predictions
@@ -133,9 +131,7 @@ class OfflineVideoGenerator:
             and not self.latent_reuse.skip_reused_steps
             and self.save_prediction_latents
         )
-        if reuse_final_latent:
-            latents = None
-        elif reuse_initial_latent and reuse_prefix is not None:
+        if reuse_initial_latent and reuse_prefix is not None:
             latents = load_latents(initial_noise_latent_path(reuse_prefix))
         else:
             latents = _initial_noise_latents(self.config, seed)
@@ -227,19 +223,19 @@ class OfflineVideoGenerator:
             sigma_schedule = read_sigma_schedule(sigma_schedule_path)
         finally:
             sigma_schedule_path.unlink(missing_ok=True)
-        if reuse_final_latent:
-            if reuse_prefix is None:
-                raise ValueError("missing latent reuse source prefix")
-            final_latent_sha256 = safetensors_sha256_metadata(
-                final_noise_latent_path(reuse_prefix)
-            )
-        elif final_latent_path is not None:
+        if final_latent_path is not None:
             if not final_latent_path.exists():
                 raise FileNotFoundError(
                     "worker-side latent capture did not write expected final "
                     f"latent: {final_latent_path}"
                 )
             final_latent_sha256 = safetensors_sha256_metadata(final_latent_path)
+        elif reuse_final_latent:
+            if reuse_prefix is None:
+                raise ValueError("missing latent reuse source prefix")
+            final_latent_sha256 = safetensors_sha256_metadata(
+                final_noise_latent_path(reuse_prefix)
+            )
         else:
             final_latent_sha256 = None
         if self.save_prompt_embeds:

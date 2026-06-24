@@ -73,6 +73,8 @@ viv generate -p pilot \
   /workspace/outputs
 ```
 
+When `--reuse-final-latents` is specified, generation still runs normally and writes any requested artifacts. After denoising and capture, the saved final latent from `--reuse-from` is used for video decoding.
+
 ## Output
 
 The script runs offline inference through vLLM-Omni and writes:
