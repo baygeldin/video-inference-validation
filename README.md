@@ -213,9 +213,9 @@ viv compare \
 ```
 
 Add one or more comparison flags to choose what the report contains:
-- `--final-latents` reports RMSE and relative L2 error for each final latent tensor.
+- `--final-latents` reports RMSE, relative L2 error, and cosine similarity for each final latent tensor.
 - `--video-files` reports mean/min/max per-frame SSIM for each generated video file.
-- `--predictions` reports mean/min/max RMSE and relative L2 error across matching denoising prediction latents plus per-step prediction drift metrics.
+- `--predictions` reports mean/min/max RMSE, relative L2 error, and cosine similarity across matching denoising prediction latents plus per-step prediction drift metrics.
 
 ```json
 {
@@ -237,7 +237,8 @@ Add one or more comparison flags to choose what the report contains:
           },
           "final_latent": {
             "rmse": 0.001,
-            "relative_l2_error": 0.0001
+            "relative_l2_error": 0.0001,
+            "cosine_similarity": 0.9999
           },
           "predictions": {
             "mean_rmse": 0.001,
@@ -246,11 +247,15 @@ Add one or more comparison flags to choose what the report contains:
             "mean_relative_l2_error": 0.0001,
             "min_relative_l2_error": 0.0,
             "max_relative_l2_error": 0.001,
+            "mean_cosine_similarity": 0.9999,
+            "min_cosine_similarity": 0.999,
+            "max_cosine_similarity": 1.0,
             "steps": [
               {
                 "step_idx": 0,
                 "rmse": 0.0,
-                "relative_l2_error": 0.0
+                "relative_l2_error": 0.0,
+                "cosine_similarity": 1.0
               }
             ]
           }

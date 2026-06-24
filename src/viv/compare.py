@@ -271,6 +271,7 @@ def _latent_metrics(
     diff = generation - baseline
     rmse = torch.sqrt(torch.mean(torch.square(diff))).item()
     baseline_norm = torch.linalg.vector_norm(baseline).item()
+    generation_norm = torch.linalg.vector_norm(generation).item()
     diff_norm = torch.linalg.vector_norm(diff).item()
     if baseline_norm == 0.0:
         relative_l2_error = 0.0 if diff_norm == 0.0 else math.inf
@@ -278,9 +279,22 @@ def _latent_metrics(
         relative_l2_error = diff_norm / baseline_norm
     if not math.isfinite(relative_l2_error):
         raise ValueError(f"relative L2 is not finite for {generation_path.name}")
+    if baseline_norm == 0.0 or generation_norm == 0.0:
+        cosine_similarity = 1.0 if diff_norm == 0.0 else math.nan
+    else:
+        cosine_similarity = (
+            torch.sum(baseline * generation).item()
+            / (baseline_norm * generation_norm)
+        )
+        cosine_similarity = max(-1.0, min(1.0, cosine_similarity))
+    if not math.isfinite(cosine_similarity):
+        raise ValueError(
+            f"cosine similarity is not finite for {generation_path.name}"
+        )
     return {
         "rmse": rmse,
         "relative_l2_error": relative_l2_error,
+        "cosine_similarity": cosine_similarity,
     }
 
 
@@ -300,6 +314,9 @@ def _prediction_metrics(
     relative_l2_errors = [
         metrics["relative_l2_error"] for metrics in step_metrics
     ]
+    cosine_similarities = [
+        metrics["cosine_similarity"] for metrics in step_metrics
+    ]
     return {
         "mean_rmse": sum(rmses) / len(rmses),
         "min_rmse": min(rmses),
@@ -309,6 +326,11 @@ def _prediction_metrics(
         ),
         "min_relative_l2_error": min(relative_l2_errors),
         "max_relative_l2_error": max(relative_l2_errors),
+        "mean_cosine_similarity": (
+            sum(cosine_similarities) / len(cosine_similarities)
+        ),
+        "min_cosine_similarity": min(cosine_similarities),
+        "max_cosine_similarity": max(cosine_similarities),
         "steps": step_metrics,
     }
 
