@@ -58,12 +58,19 @@ def _add_generate_arguments(parser: argparse.ArgumentParser) -> None:
         help="Inference config identifier",
     )
     parser.add_argument(
-        "--save-latents",
+        "--save-initial-latents",
         action="store_true",
-        help=(
-            "Save initial, final, and denoising step latent tensors "
-            "(disabled by default)"
-        ),
+        help="Save initial noise latent tensors (disabled by default)",
+    )
+    parser.add_argument(
+        "--save-final-latents",
+        action="store_true",
+        help="Save final noise latent tensors (disabled by default)",
+    )
+    parser.add_argument(
+        "--save-prediction-latents",
+        action="store_true",
+        help="Save denoising step prediction latent tensors (disabled by default)",
     )
     parser.add_argument(
         "--save-prompt-embeds",
@@ -71,10 +78,18 @@ def _add_generate_arguments(parser: argparse.ArgumentParser) -> None:
         help="Save encoded prompt embedding tensors (disabled by default)",
     )
     parser.add_argument(
-        "--reuse-latents-from",
-        dest="reuse_latents_from",
+        "--save-all",
+        action="store_true",
+        help=(
+            "Save initial, final, prediction, and prompt embedding tensors "
+            "(disabled by default)"
+        ),
+    )
+    parser.add_argument(
+        "--reuse-from",
+        dest="reuse_from",
         type=Path,
-        help="Folder containing saved latent tensors to reuse",
+        help="Folder containing saved tensors to reuse",
     )
     parser.add_argument(
         "--reuse-initial-latents",
@@ -95,12 +110,11 @@ def _add_generate_arguments(parser: argparse.ArgumentParser) -> None:
         ),
     )
     parser.add_argument(
-        "--save-original-predictions",
+        "--skip-reused-computation",
         action="store_true",
         help=(
-            "When reusing prediction latents, still run model inference for reused "
-            "steps and save the fresh predictions before stepping with the reused "
-            "predictions"
+            "When reusing tensors, load reused artifacts directly instead of "
+            "rerunning the corresponding computation"
         ),
     )
     parser.add_argument(
@@ -112,13 +126,22 @@ def _add_generate_arguments(parser: argparse.ArgumentParser) -> None:
         "--reuse-final-latents",
         dest="reuse_final_latent",
         action="store_true",
-        help="Decode the saved final latent directly, skipping prompt encoding and denoising",
+        help=(
+            "After denoising and artifact capture, decode the saved final "
+            "latent from --reuse-from"
+        ),
     )
     parser.add_argument("output_dir", type=Path, help="Output folder path")
 
 
 def _run_generate(args: argparse.Namespace) -> int:
     parser = args.parser
+    if args.save_all:
+        args.save_initial_latents = True
+        args.save_final_latents = True
+        args.save_prediction_latents = True
+        args.save_prompt_embeds = True
+
     reuse_all_predictions = (
         args.reuse_predictions == _REUSE_ALL_PREDICTIONS_MARKER
     )
@@ -131,38 +154,23 @@ def _run_generate(args: argparse.Namespace) -> int:
         or args.reuse_prompt_embeds
         or args.reuse_final_latent
     )
-    if reuse_requested and args.reuse_latents_from is None:
-        parser.error("--reuse-latents-from is required when reusing saved tensors")
-    if args.reuse_final_latent and (
-        args.reuse_initial_latent or reuse_predictions_requested
-    ):
-        parser.error("--reuse-final-latents cannot be combined with other reuse modes")
-    if args.reuse_final_latent and (
-        args.save_prompt_embeds or args.reuse_prompt_embeds
-    ):
-        parser.error(
-            "--reuse-final-latents cannot be combined with prompt embedding "
-            "capture or reuse"
-        )
+    if reuse_requested and args.reuse_from is None:
+        parser.error("--reuse-from is required when reusing saved tensors")
     if isinstance(args.reuse_predictions, int) and args.reuse_predictions < 0:
         parser.error("--reuse-prediction-latents must be a non-negative integer")
-    if args.save_original_predictions and not reuse_predictions_requested:
-        parser.error(
-            "--save-original-predictions requires --reuse-prediction-latents"
-        )
-    if args.save_original_predictions and not args.save_latents:
-        parser.error("--save-original-predictions requires --save-latents")
+    if args.skip_reused_computation and not reuse_requested:
+        parser.error("--skip-reused-computation requires at least one reuse flag")
 
     latent_reuse = None
-    if args.reuse_latents_from is not None:
+    if args.reuse_from is not None:
         latent_reuse = LatentReuseConfig(
-            source_dir=args.reuse_latents_from,
+            source_dir=args.reuse_from,
             reuse_initial_latent=args.reuse_initial_latent,
             reuse_predictions=(
                 None if reuse_all_predictions else args.reuse_predictions
             ),
             reuse_all_predictions=reuse_all_predictions,
-            save_original_predictions=args.save_original_predictions,
+            skip_reused_computation=args.skip_reused_computation,
             reuse_final_latent=args.reuse_final_latent,
             reuse_prompt_embeds=args.reuse_prompt_embeds,
         )
@@ -175,7 +183,9 @@ def _run_generate(args: argparse.Namespace) -> int:
             args.output_dir,
             args.config.strip(),
             config,
-            save_latents=args.save_latents,
+            save_initial_latents=args.save_initial_latents,
+            save_final_latents=args.save_final_latents,
+            save_prediction_latents=args.save_prediction_latents,
             save_prompt_embeds=args.save_prompt_embeds,
             latent_reuse=latent_reuse,
         )

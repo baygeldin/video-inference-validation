@@ -14,7 +14,9 @@ def run(
     output_dir: Path,
     config_name: str,
     config: InferenceConfig,
-    save_latents: bool = False,
+    save_initial_latents: bool = False,
+    save_final_latents: bool = False,
+    save_prediction_latents: bool = False,
     save_prompt_embeds: bool = False,
     latent_reuse: LatentReuseConfig | None = None,
 ) -> None:
@@ -32,7 +34,9 @@ def run(
     )
     generator = OfflineVideoGenerator(
         config,
-        save_latents=save_latents,
+        save_initial_latents=save_initial_latents,
+        save_final_latents=save_final_latents,
+        save_prediction_latents=save_prediction_latents,
         save_prompt_embeds=save_prompt_embeds,
         latent_reuse=latent_reuse,
     )

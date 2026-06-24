@@ -13,7 +13,9 @@ LATENT_PREFIX_EXTRA_ARG = "viv_latent_prefix"
 PROMPT_EMBEDS_PREFIX_EXTRA_ARG = "viv_prompt_embeds_prefix"
 REUSE_LATENT_PREFIX_EXTRA_ARG = "viv_reuse_latent_prefix"
 REUSE_PREDICTIONS_EXTRA_ARG = "viv_reuse_predictions"
-SAVE_ORIGINAL_PREDICTIONS_EXTRA_ARG = "viv_save_original_predictions"
+SAVE_FINAL_LATENTS_EXTRA_ARG = "viv_save_final_latents"
+SAVE_PREDICTION_LATENTS_EXTRA_ARG = "viv_save_prediction_latents"
+SKIP_REUSED_COMPUTATION_EXTRA_ARG = "viv_skip_reused_computation"
 REUSE_FINAL_LATENT_EXTRA_ARG = "viv_reuse_final_latent"
 SAVE_PROMPT_EMBEDS_EXTRA_ARG = "viv_save_prompt_embeds"
 REUSE_PROMPT_EMBEDS_EXTRA_ARG = "viv_reuse_prompt_embeds"
@@ -38,8 +40,17 @@ def install_wan_latent_capture() -> None:
         previous_seed = getattr(self, "_viv_seed", None)
         previous_reuse_prefix = getattr(self, "_viv_reuse_latent_prefix", None)
         previous_reuse_predictions = getattr(self, "_viv_reuse_predictions", None)
-        previous_save_original_predictions = getattr(
-            self, "_viv_save_original_predictions", None
+        previous_reuse_final_latent = getattr(self, "_viv_reuse_final_latent", None)
+        previous_reuse_prompt_embeds = getattr(self, "_viv_reuse_prompt_embeds", None)
+        previous_save_final_latents = getattr(self, "_viv_save_final_latents", None)
+        previous_save_prediction_latents = getattr(
+            self, "_viv_save_prediction_latents", None
+        )
+        previous_skip_reused_computation = getattr(
+            self, "_viv_skip_reused_computation", None
+        )
+        previous_suppress_prediction_latent_save = getattr(
+            self, "_viv_suppress_prediction_latent_save", None
         )
         previous_save_prompt_embeds = getattr(
             self, "_viv_save_prompt_embeds", None
@@ -53,19 +64,24 @@ def install_wan_latent_capture() -> None:
         self._viv_seed = _seed_from_request(req)
         self._viv_reuse_latent_prefix = _reuse_prefix_from_request(req)
         self._viv_reuse_predictions = _reuse_predictions_from_request(req)
-        self._viv_save_original_predictions = (
-            _save_original_predictions_from_request(req)
+        self._viv_reuse_final_latent = _reuse_final_latent_from_request(req)
+        self._viv_reuse_prompt_embeds = _reuse_prompt_embeds_from_request(req)
+        self._viv_save_final_latents = _save_final_latents_from_request(req)
+        self._viv_save_prediction_latents = (
+            _save_prediction_latents_from_request(req)
         )
+        self._viv_skip_reused_computation = (
+            _skip_reused_computation_from_request(req)
+        )
+        self._viv_suppress_prediction_latent_save = False
         self._viv_save_prompt_embeds = _save_prompt_embeds_from_request(req)
         self._viv_sigma_schedule_path = _sigma_schedule_path_from_request(req)
         self._viv_sigma_schedule = None
         try:
-            if _reuse_final_latent_from_request(req):
-                _write_sigma_schedule(self._viv_sigma_schedule_path, [])
-                return _decode_reused_final_latent(
-                    self, req, _output_type_from_call(req, args, kwargs)
-                )
-            if _reuse_prompt_embeds_from_request(req):
+            if (
+                _reuse_prompt_embeds_from_request(req)
+                and _skip_reused_computation_from_request(req)
+            ):
                 reuse_prefix = getattr(self, "_viv_reuse_latent_prefix", None)
                 if reuse_prefix is None:
                     raise ValueError("missing prompt embedding reuse source prefix")
@@ -88,8 +104,13 @@ def install_wan_latent_capture() -> None:
             self._viv_seed = previous_seed
             self._viv_reuse_latent_prefix = previous_reuse_prefix
             self._viv_reuse_predictions = previous_reuse_predictions
-            self._viv_save_original_predictions = (
-                previous_save_original_predictions
+            self._viv_reuse_final_latent = previous_reuse_final_latent
+            self._viv_reuse_prompt_embeds = previous_reuse_prompt_embeds
+            self._viv_save_final_latents = previous_save_final_latents
+            self._viv_save_prediction_latents = previous_save_prediction_latents
+            self._viv_skip_reused_computation = previous_skip_reused_computation
+            self._viv_suppress_prediction_latent_save = (
+                previous_suppress_prediction_latent_save
             )
             self._viv_save_prompt_embeds = previous_save_prompt_embeds
             self._viv_sigma_schedule_path = previous_sigma_schedule_path
@@ -99,11 +120,14 @@ def install_wan_latent_capture() -> None:
         previous_step_idx = getattr(self, "_viv_step_idx", None)
         previous_sigma_schedule = getattr(self, "_viv_sigma_schedule", None)
         reuse_predictions = getattr(self, "_viv_reuse_predictions", None)
+        skip_reused_computation = bool(
+            getattr(self, "_viv_skip_reused_computation", False)
+        )
         self._viv_step_idx = 0
         self._viv_sigma_schedule = []
         try:
+            values = _diffuse_arguments(original_diffuse, self, args, kwargs)
             if getattr(self, "_viv_save_prompt_embeds", False):
-                values = _diffuse_arguments(original_diffuse, self, args, kwargs)
                 _save_prompt_embeddings(
                     prompt_embeddings_path_from_prefix(
                         getattr(self, "_viv_prompt_embeds_prefix", None)
@@ -114,20 +138,28 @@ def install_wan_latent_capture() -> None:
                         "seed": getattr(self, "_viv_seed", None),
                     },
                 )
+            if (
+                getattr(self, "_viv_reuse_prompt_embeds", False)
+                and not skip_reused_computation
+            ):
+                _replace_with_reused_prompt_embeddings(self, values)
+            if (
+                getattr(self, "_viv_reuse_final_latent", False)
+                and skip_reused_computation
+            ):
+                return _load_reused_final_latents(self, values["latents"])
             if reuse_predictions is None:
-                latents = original_diffuse(self, *args, **kwargs)
+                latents = _call_diffuse_with_arguments(original_diffuse, values)
             else:
                 latents = _diffuse_with_reused_denoising(
                     self,
-                    original_diffuse,
+                    values,
                     reuse_predictions,
-                    *args,
-                    **kwargs,
                 )
             final_latent_path = _final_noise_latent_path_from_prefix(
                 getattr(self, "_viv_latent_prefix", None)
             )
-            if final_latent_path is not None:
+            if getattr(self, "_viv_save_final_latents", False):
                 _save_latents(
                     final_latent_path,
                     "final_noise",
@@ -136,6 +168,8 @@ def install_wan_latent_capture() -> None:
                         "seed": getattr(self, "_viv_seed", None),
                     },
                 )
+            if getattr(self, "_viv_reuse_final_latent", False):
+                latents = _load_reused_final_latents(self, latents)
             _write_sigma_schedule(
                 getattr(self, "_viv_sigma_schedule_path", None),
                 getattr(self, "_viv_sigma_schedule", None),
@@ -165,19 +199,23 @@ def install_wan_latent_capture() -> None:
         if sigma_schedule is not None:
             sigma_schedule.append(sigma)
         noise_pred_to_save = getattr(self, "_viv_noise_pred_to_save", noise_pred)
-        _save_noise_pred(
-            _denoising_step_latent_path_from_prefix(
-                getattr(self, "_viv_latent_prefix", None), step_idx
-            ),
-            "denoising_step",
-            noise_pred_to_save,
-            {
-                "seed": getattr(self, "_viv_seed", None),
-                "step_idx": step_idx,
-                "timestep": _scalar_float(t),
-                "sigma": sigma,
-            },
-        )
+        if (
+            getattr(self, "_viv_save_prediction_latents", False)
+            and not getattr(self, "_viv_suppress_prediction_latent_save", False)
+        ):
+            _save_noise_pred(
+                _denoising_step_latent_path_from_prefix(
+                    getattr(self, "_viv_latent_prefix", None), step_idx
+                ),
+                "denoising_step",
+                noise_pred_to_save,
+                {
+                    "seed": getattr(self, "_viv_seed", None),
+                    "step_idx": step_idx,
+                    "timestep": _scalar_float(t),
+                    "sigma": sigma,
+                },
+            )
         self._viv_step_idx = step_idx + 1
         return updated_latents
 
@@ -515,10 +553,22 @@ def _reuse_predictions_from_request(req: Any) -> int | None:
     return int(count)
 
 
-def _save_original_predictions_from_request(req: Any) -> bool:
+def _save_final_latents_from_request(req: Any) -> bool:
     sampling_params = getattr(req, "sampling_params", None)
     extra_args = getattr(sampling_params, "extra_args", None) or {}
-    return _truthy(extra_args.get(SAVE_ORIGINAL_PREDICTIONS_EXTRA_ARG))
+    return _truthy(extra_args.get(SAVE_FINAL_LATENTS_EXTRA_ARG))
+
+
+def _save_prediction_latents_from_request(req: Any) -> bool:
+    sampling_params = getattr(req, "sampling_params", None)
+    extra_args = getattr(sampling_params, "extra_args", None) or {}
+    return _truthy(extra_args.get(SAVE_PREDICTION_LATENTS_EXTRA_ARG))
+
+
+def _skip_reused_computation_from_request(req: Any) -> bool:
+    sampling_params = getattr(req, "sampling_params", None)
+    extra_args = getattr(sampling_params, "extra_args", None) or {}
+    return _truthy(extra_args.get(SKIP_REUSED_COMPUTATION_EXTRA_ARG))
 
 
 def _save_prompt_embeds_from_request(req: Any) -> bool:
@@ -622,18 +672,33 @@ def _diffuse_arguments(
     return bound.arguments
 
 
+def _call_diffuse_with_arguments(original_diffuse: Any, values: dict[str, Any]) -> Any:
+    call_values = dict(values)
+    self = call_values.pop("self")
+    return original_diffuse(self, **call_values)
+
+
+def _replace_with_reused_prompt_embeddings(self: Any, values: dict[str, Any]) -> None:
+    reuse_prefix = getattr(self, "_viv_reuse_latent_prefix", None)
+    if reuse_prefix is None:
+        raise ValueError("missing prompt embedding reuse source prefix")
+    prompt_embeds, negative_prompt_embeds = load_prompt_embeddings(
+        prompt_embeddings_path(reuse_prefix),
+        device=values["latents"].device,
+        dtype=values["dtype"],
+    )
+    values["prompt_embeds"] = prompt_embeds
+    values["negative_prompt_embeds"] = negative_prompt_embeds
+
+
 def _diffuse_with_reused_denoising(
     self: Any,
-    original_diffuse: Any,
+    values: dict[str, Any],
     reuse_predictions: int,
-    *args: Any,
-    **kwargs: Any,
 ) -> Any:
     from vllm_omni.diffusion.forward_context import (
         set_forward_context_denoise_step_idx,
     )
-
-    values = _diffuse_arguments(original_diffuse, self, args, kwargs)
 
     latents = values["latents"]
     timesteps = values["timesteps"]
@@ -648,8 +713,8 @@ def _diffuse_with_reused_denoising(
     first_frame_mask = values["first_frame_mask"]
 
     reuse_prefix = getattr(self, "_viv_reuse_latent_prefix", None)
-    save_original_predictions = bool(
-        getattr(self, "_viv_save_original_predictions", False)
+    skip_reused_computation = bool(
+        getattr(self, "_viv_skip_reused_computation", False)
     )
     if reuse_prefix is None:
         raise ValueError("missing latent reuse source prefix")
@@ -671,16 +736,25 @@ def _diffuse_with_reused_denoising(
             self._current_timestep = t
             set_forward_context_denoise_step_idx(step_idx)
 
-            if step_idx < reuse_predictions and not save_original_predictions:
+            if step_idx < reuse_predictions and skip_reused_computation:
                 latent_path = _denoising_step_latent_path_from_prefix(
                     reuse_prefix, step_idx
                 )
                 noise_pred = _load_noise_pred(
                     latent_path, device=latents.device, dtype=dtype
                 )
-                latents = self.scheduler_step_maybe_with_cfg(
-                    noise_pred, t, latents, do_true_cfg=False
+                previous_suppress_prediction_latent_save = getattr(
+                    self, "_viv_suppress_prediction_latent_save", False
                 )
+                self._viv_suppress_prediction_latent_save = True
+                try:
+                    latents = self.scheduler_step_maybe_with_cfg(
+                        noise_pred, t, latents, do_true_cfg=False
+                    )
+                finally:
+                    self._viv_suppress_prediction_latent_save = (
+                        previous_suppress_prediction_latent_save
+                    )
                 pbar.update()
                 continue
 
@@ -966,56 +1040,16 @@ def _write_sigma_schedule(
     tmp_path.replace(schedule_path)
 
 
-def _decode_reused_final_latent(
-    self: Any, req: Any, output_type: str | None
-) -> Any:
-    from vllm_omni.diffusion.data import DiffusionOutput
-
-    reuse_prefix = _reuse_prefix_from_request(req)
+def _load_reused_final_latents(self: Any, generated_latents: Any) -> Any:
+    reuse_prefix = getattr(self, "_viv_reuse_latent_prefix", None)
     latent_path = _final_noise_latent_path_from_prefix(reuse_prefix)
     if latent_path is None:
         raise ValueError("missing latent reuse source prefix")
-
-    latents = load_latents(latent_path, device=self.device, dtype=self.vae.dtype)
-    if output_type == "latent":
-        output = latents
-    else:
-        import torch
-
-        latents_mean = (
-            torch.tensor(self.vae.config.latents_mean)
-            .view(1, self.vae.config.z_dim, 1, 1, 1)
-            .to(latents.device, latents.dtype)
-        )
-        latents_std = 1.0 / torch.tensor(self.vae.config.latents_std).view(
-            1, self.vae.config.z_dim, 1, 1, 1
-        ).to(latents.device, latents.dtype)
-        latents = latents / latents_std + latents_mean
-        output = self.vae.decode(latents, return_dict=False)[0]
-
-    return DiffusionOutput(
-        output=output,
-        custom_output={"viv_reused_final_latent": str(latent_path)},
-        stage_durations=self.stage_durations
-        if hasattr(self, "stage_durations")
-        else {},
+    return load_latents(
+        latent_path,
+        device=getattr(generated_latents, "device", None),
+        dtype=getattr(generated_latents, "dtype", None),
     )
-
-
-def _output_type_from_call(
-    req: Any, args: tuple[Any, ...], kwargs: dict[str, Any]
-) -> str | None:
-    if "output_type" in kwargs:
-        return kwargs["output_type"]
-    sampling_params_output_type = getattr(
-        getattr(req, "sampling_params", None), "output_type", None
-    )
-    if sampling_params_output_type is not None:
-        return sampling_params_output_type
-    # Wan22Pipeline.forward defaults output_type after seven optional positional args.
-    if len(args) >= 8:
-        return args[7]
-    return "np"
 
 
 def _sigma_for_step(scheduler: Any, step_idx: int, timestep: Any) -> float:
