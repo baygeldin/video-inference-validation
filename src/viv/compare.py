@@ -269,16 +269,27 @@ def _latent_metrics(
         )
 
     diff = generation - baseline
+    abs_diff = torch.abs(diff)
     rmse = torch.sqrt(torch.mean(torch.square(diff))).item()
+    mean_abs_error = torch.mean(abs_diff).item()
+    max_abs_error = torch.max(abs_diff).item()
     baseline_norm = torch.linalg.vector_norm(baseline).item()
     generation_norm = torch.linalg.vector_norm(generation).item()
     diff_norm = torch.linalg.vector_norm(diff).item()
+    baseline_l1_norm = torch.sum(torch.abs(baseline)).item()
+    diff_l1_norm = torch.sum(abs_diff).item()
     if baseline_norm == 0.0:
         relative_l2_error = 0.0 if diff_norm == 0.0 else math.inf
     else:
         relative_l2_error = diff_norm / baseline_norm
     if not math.isfinite(relative_l2_error):
         raise ValueError(f"relative L2 is not finite for {generation_path.name}")
+    if baseline_l1_norm == 0.0:
+        relative_l1_error = 0.0 if diff_l1_norm == 0.0 else math.inf
+    else:
+        relative_l1_error = diff_l1_norm / baseline_l1_norm
+    if not math.isfinite(relative_l1_error):
+        raise ValueError(f"relative L1 is not finite for {generation_path.name}")
     if baseline_norm == 0.0 or generation_norm == 0.0:
         cosine_similarity = 1.0 if diff_norm == 0.0 else math.nan
     else:
@@ -291,10 +302,26 @@ def _latent_metrics(
         raise ValueError(
             f"cosine similarity is not finite for {generation_path.name}"
         )
+    changed_fraction = torch.count_nonzero(diff).item() / baseline.numel()
+    baseline_std = torch.std(baseline).item()
+    generation_std = torch.std(generation).item()
+    if baseline_std == 0.0:
+        relative_std_delta = 0.0 if generation_std == 0.0 else math.inf
+    else:
+        relative_std_delta = abs(generation_std - baseline_std) / baseline_std
+    if not math.isfinite(relative_std_delta):
+        raise ValueError(
+            f"relative std delta is not finite for {generation_path.name}"
+        )
     return {
         "rmse": rmse,
+        "mean_abs_error": mean_abs_error,
+        "max_abs_error": max_abs_error,
+        "relative_l1_error": relative_l1_error,
         "relative_l2_error": relative_l2_error,
         "cosine_similarity": cosine_similarity,
+        "changed_fraction": changed_fraction,
+        "relative_std_delta": relative_std_delta,
     }
 
 
@@ -311,16 +338,40 @@ def _prediction_metrics(
         metrics = _latent_metrics(baseline_paths[step], generation_paths[step])
         step_metrics.append({"step_idx": step, **metrics})
     rmses = [metrics["rmse"] for metrics in step_metrics]
+    mean_abs_errors = [metrics["mean_abs_error"] for metrics in step_metrics]
+    max_abs_errors = [metrics["max_abs_error"] for metrics in step_metrics]
+    relative_l1_errors = [
+        metrics["relative_l1_error"] for metrics in step_metrics
+    ]
     relative_l2_errors = [
         metrics["relative_l2_error"] for metrics in step_metrics
     ]
     cosine_similarities = [
         metrics["cosine_similarity"] for metrics in step_metrics
     ]
+    changed_fractions = [
+        metrics["changed_fraction"] for metrics in step_metrics
+    ]
+    relative_std_deltas = [
+        metrics["relative_std_delta"] for metrics in step_metrics
+    ]
     return {
         "mean_rmse": sum(rmses) / len(rmses),
         "min_rmse": min(rmses),
         "max_rmse": max(rmses),
+        "mean_mean_abs_error": (
+            sum(mean_abs_errors) / len(mean_abs_errors)
+        ),
+        "min_mean_abs_error": min(mean_abs_errors),
+        "max_mean_abs_error": max(mean_abs_errors),
+        "mean_max_abs_error": sum(max_abs_errors) / len(max_abs_errors),
+        "min_max_abs_error": min(max_abs_errors),
+        "max_max_abs_error": max(max_abs_errors),
+        "mean_relative_l1_error": (
+            sum(relative_l1_errors) / len(relative_l1_errors)
+        ),
+        "min_relative_l1_error": min(relative_l1_errors),
+        "max_relative_l1_error": max(relative_l1_errors),
         "mean_relative_l2_error": (
             sum(relative_l2_errors) / len(relative_l2_errors)
         ),
@@ -331,6 +382,16 @@ def _prediction_metrics(
         ),
         "min_cosine_similarity": min(cosine_similarities),
         "max_cosine_similarity": max(cosine_similarities),
+        "mean_changed_fraction": (
+            sum(changed_fractions) / len(changed_fractions)
+        ),
+        "min_changed_fraction": min(changed_fractions),
+        "max_changed_fraction": max(changed_fractions),
+        "mean_relative_std_delta": (
+            sum(relative_std_deltas) / len(relative_std_deltas)
+        ),
+        "min_relative_std_delta": min(relative_std_deltas),
+        "max_relative_std_delta": max(relative_std_deltas),
         "steps": step_metrics,
     }
 

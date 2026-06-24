@@ -215,7 +215,7 @@ viv compare \
 Add one or more comparison flags to choose what the report contains:
 - `--final-latents` reports RMSE, relative L2 error, and cosine similarity for each final latent tensor.
 - `--video-files` reports mean/min/max per-frame SSIM for each generated video file.
-- `--predictions` reports mean/min/max RMSE, relative L2 error, and cosine similarity across matching denoising prediction latents plus per-step prediction drift metrics.
+- `--predictions` reports mean/min/max RMSE, absolute error, relative L1/L2 error, cosine similarity, changed-value fraction, and relative standard-deviation drift across matching denoising prediction latents plus per-step prediction drift metrics.
 
 ```json
 {
@@ -244,18 +244,38 @@ Add one or more comparison flags to choose what the report contains:
             "mean_rmse": 0.001,
             "min_rmse": 0.0,
             "max_rmse": 0.01,
+            "mean_mean_abs_error": 0.001,
+            "min_mean_abs_error": 0.0,
+            "max_mean_abs_error": 0.01,
+            "mean_max_abs_error": 0.001,
+            "min_max_abs_error": 0.0,
+            "max_max_abs_error": 0.01,
+            "mean_relative_l1_error": 0.0001,
+            "min_relative_l1_error": 0.0,
+            "max_relative_l1_error": 0.001,
             "mean_relative_l2_error": 0.0001,
             "min_relative_l2_error": 0.0,
             "max_relative_l2_error": 0.001,
             "mean_cosine_similarity": 0.9999,
             "min_cosine_similarity": 0.999,
             "max_cosine_similarity": 1.0,
+            "mean_changed_fraction": 0.01,
+            "min_changed_fraction": 0.0,
+            "max_changed_fraction": 0.02,
+            "mean_relative_std_delta": 0.0001,
+            "min_relative_std_delta": 0.0,
+            "max_relative_std_delta": 0.001,
             "steps": [
               {
                 "step_idx": 0,
                 "rmse": 0.0,
+                "mean_abs_error": 0.0,
+                "max_abs_error": 0.0,
+                "relative_l1_error": 0.0,
                 "relative_l2_error": 0.0,
-                "cosine_similarity": 1.0
+                "cosine_similarity": 1.0,
+                "changed_fraction": 0.0,
+                "relative_std_delta": 0.0
               }
             ]
           }
