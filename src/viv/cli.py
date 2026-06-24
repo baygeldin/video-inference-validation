@@ -110,11 +110,11 @@ def _add_generate_arguments(parser: argparse.ArgumentParser) -> None:
         ),
     )
     parser.add_argument(
-        "--skip-reused-steps",
+        "--skip-reused-computation",
         action="store_true",
         help=(
-            "When reusing prediction latents, load reused predictions directly "
-            "instead of rerunning reused denoising steps"
+            "When reusing tensors, load reused artifacts directly instead of "
+            "rerunning the corresponding computation"
         ),
     )
     parser.add_argument(
@@ -158,8 +158,8 @@ def _run_generate(args: argparse.Namespace) -> int:
         parser.error("--reuse-from is required when reusing saved tensors")
     if isinstance(args.reuse_predictions, int) and args.reuse_predictions < 0:
         parser.error("--reuse-prediction-latents must be a non-negative integer")
-    if args.skip_reused_steps and not reuse_predictions_requested:
-        parser.error("--skip-reused-steps requires --reuse-prediction-latents")
+    if args.skip_reused_computation and not reuse_requested:
+        parser.error("--skip-reused-computation requires at least one reuse flag")
 
     latent_reuse = None
     if args.reuse_from is not None:
@@ -170,7 +170,7 @@ def _run_generate(args: argparse.Namespace) -> int:
                 None if reuse_all_predictions else args.reuse_predictions
             ),
             reuse_all_predictions=reuse_all_predictions,
-            skip_reused_steps=args.skip_reused_steps,
+            skip_reused_computation=args.skip_reused_computation,
             reuse_final_latent=args.reuse_final_latent,
             reuse_prompt_embeds=args.reuse_prompt_embeds,
         )

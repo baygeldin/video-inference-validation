@@ -56,7 +56,7 @@ viv generate -p pilot \
 
 If `--reuse-prediction-latents` is specified, then `--reuse-initial-latents` is enabled by default (because it makes no sense to reuse predictions without sharing the initial noise latent). With a `COUNT`, it uses the first `COUNT` saved model predictions and their original sigmas for denoising, then compresses the remaining saved sigma trajectory into the new run's remaining steps with equal spacing in UniPC lambda space. Without a `COUNT`, it reuses all saved prediction steps from the source generation.
 
-By default, reused prediction steps still run model inference so `--save-prediction-latents` captures the fresh prediction tensors for comparison. Those fresh tensors are discarded after saving, and the previously saved predictions are used to update the latent state. Add `--skip-reused-steps` to load the reused predictions directly; reused steps are not rerun and their copied prediction tensors are not written to the output folder:
+By default, reused artifacts still run their corresponding computation so save flags capture fresh tensors for comparison. Fresh initial latents, prompt embeddings, prediction tensors, and final latents are discarded after saving when their reused counterparts are selected for generation. Add `--skip-reused-computation` to load reused tensors directly; reused computation is not rerun, and copied tensors for those reused artifacts are not written to the output folder:
 
 ```bash
 viv generate -p pilot \
@@ -69,11 +69,11 @@ viv generate -p pilot \
   --save-prediction-latents \
   --reuse-from /workspace/previous-outputs \
   --reuse-prediction-latents 10 \
-  --skip-reused-steps \
+  --skip-reused-computation \
   /workspace/outputs
 ```
 
-When `--reuse-final-latents` is specified, generation still runs normally and writes any requested artifacts. After denoising and capture, the saved final latent from `--reuse-from` is used for video decoding.
+When `--reuse-final-latents` is specified without `--skip-reused-computation`, generation still runs normally and writes any requested artifacts. After denoising and capture, the saved final latent from `--reuse-from` is used for video decoding. With `--skip-reused-computation`, denoising is skipped for final-latent reuse and the saved final latent is decoded directly.
 
 ## Output
 

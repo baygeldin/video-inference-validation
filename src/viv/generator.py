@@ -17,7 +17,7 @@ from viv.latent_capture import (
     SAVE_FINAL_LATENTS_EXTRA_ARG,
     SAVE_PREDICTION_LATENTS_EXTRA_ARG,
     SAVE_PROMPT_EMBEDS_EXTRA_ARG,
-    SKIP_REUSED_STEPS_EXTRA_ARG,
+    SKIP_REUSED_COMPUTATION_EXTRA_ARG,
     SIGMA_SCHEDULE_PATH_EXTRA_ARG,
     final_noise_latent_path,
     initial_noise_latent_path,
@@ -114,6 +114,10 @@ class OfflineVideoGenerator:
             self.latent_reuse is not None
             and self.latent_reuse.reuse_prompt_embeds
         )
+        skip_reused_computation = (
+            self.latent_reuse is not None
+            and self.latent_reuse.skip_reused_computation
+        )
         initial_latent_reused = reuse_initial_latent
         reuse_predictions = (
             _resolve_reuse_prediction_count(self.latent_reuse, reuse_prefix)
@@ -128,13 +132,18 @@ class OfflineVideoGenerator:
         original_prediction_latents_saved = (
             reused_prediction_latents > 0
             and self.latent_reuse is not None
-            and not self.latent_reuse.skip_reused_steps
+            and not self.latent_reuse.skip_reused_computation
             and self.save_prediction_latents
         )
-        if reuse_initial_latent and reuse_prefix is not None:
+        generated_initial_latents = None
+        if not (reuse_initial_latent and skip_reused_computation):
+            generated_initial_latents = _initial_noise_latents(self.config, seed)
+        if reuse_initial_latent:
+            if reuse_prefix is None:
+                raise ValueError("missing latent reuse source prefix")
             latents = load_latents(initial_noise_latent_path(reuse_prefix))
         else:
-            latents = _initial_noise_latents(self.config, seed)
+            latents = generated_initial_latents
         reused_latents_from = _reused_latents_generation_id(
             reuse_prefix,
             reuse_initial_latent=reuse_initial_latent,
@@ -156,28 +165,37 @@ class OfflineVideoGenerator:
                 initial_latent_sha256 = safetensors_sha256_metadata(
                     initial_latent_path
                 )
-            if self.save_initial_latents:
+            if (
+                self.save_initial_latents
+                and not (reuse_initial_latent and skip_reused_computation)
+            ):
                 initial_latent_sha256 = save_initial_noise_latents(
                     initial_noise_latent_path(video_path),
-                    latents,
+                    generated_initial_latents,
                     seed,
                 ) or initial_latent_sha256
-            if self.save_final_latents:
+            if (
+                self.save_final_latents
+                and not (reuse_final_latent and skip_reused_computation)
+            ):
                 final_latent_path = final_noise_latent_path(video_path)
 
         extra_args: dict[str, object] = {
             "flow_shift": self.config.flow_shift,
             SIGMA_SCHEDULE_PATH_EXTRA_ARG: str(sigma_schedule_path.resolve()),
         }
-        if self.save_final_latents or self.save_prediction_latents:
+        if final_latent_path is not None or self.save_prediction_latents:
             extra_args[LATENT_PREFIX_EXTRA_ARG] = str(
                 video_path.with_suffix("").resolve()
             )
-        if self.save_final_latents:
+        if final_latent_path is not None:
             extra_args[SAVE_FINAL_LATENTS_EXTRA_ARG] = True
         if self.save_prediction_latents:
             extra_args[SAVE_PREDICTION_LATENTS_EXTRA_ARG] = True
-        if self.save_prompt_embeds:
+        if (
+            self.save_prompt_embeds
+            and not (reuse_prompt_embeds and skip_reused_computation)
+        ):
             extra_args[PROMPT_EMBEDS_PREFIX_EXTRA_ARG] = str(
                 video_path.with_suffix("").resolve()
             )
@@ -191,10 +209,12 @@ class OfflineVideoGenerator:
             and reuse_predictions is not None
         ):
             extra_args[REUSE_PREDICTIONS_EXTRA_ARG] = reuse_predictions
-            if self.latent_reuse.skip_reused_steps:
-                extra_args[SKIP_REUSED_STEPS_EXTRA_ARG] = True
+            if self.latent_reuse.skip_reused_computation:
+                extra_args[SKIP_REUSED_COMPUTATION_EXTRA_ARG] = True
         if reuse_final_latent:
             extra_args[REUSE_FINAL_LATENT_EXTRA_ARG] = True
+        if skip_reused_computation:
+            extra_args[SKIP_REUSED_COMPUTATION_EXTRA_ARG] = True
 
         sampling_params = OmniDiffusionSamplingParams(
             height=self.config.height,
@@ -238,7 +258,10 @@ class OfflineVideoGenerator:
             )
         else:
             final_latent_sha256 = None
-        if self.save_prompt_embeds:
+        prompt_embeds_saved = self.save_prompt_embeds and not (
+            reuse_prompt_embeds and skip_reused_computation
+        )
+        if prompt_embeds_saved:
             if not prompt_embeds_path.exists():
                 raise FileNotFoundError(
                     "worker-side prompt embedding capture did not write expected "

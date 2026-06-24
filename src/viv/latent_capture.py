@@ -15,7 +15,7 @@ REUSE_LATENT_PREFIX_EXTRA_ARG = "viv_reuse_latent_prefix"
 REUSE_PREDICTIONS_EXTRA_ARG = "viv_reuse_predictions"
 SAVE_FINAL_LATENTS_EXTRA_ARG = "viv_save_final_latents"
 SAVE_PREDICTION_LATENTS_EXTRA_ARG = "viv_save_prediction_latents"
-SKIP_REUSED_STEPS_EXTRA_ARG = "viv_skip_reused_steps"
+SKIP_REUSED_COMPUTATION_EXTRA_ARG = "viv_skip_reused_computation"
 REUSE_FINAL_LATENT_EXTRA_ARG = "viv_reuse_final_latent"
 SAVE_PROMPT_EMBEDS_EXTRA_ARG = "viv_save_prompt_embeds"
 REUSE_PROMPT_EMBEDS_EXTRA_ARG = "viv_reuse_prompt_embeds"
@@ -41,11 +41,14 @@ def install_wan_latent_capture() -> None:
         previous_reuse_prefix = getattr(self, "_viv_reuse_latent_prefix", None)
         previous_reuse_predictions = getattr(self, "_viv_reuse_predictions", None)
         previous_reuse_final_latent = getattr(self, "_viv_reuse_final_latent", None)
+        previous_reuse_prompt_embeds = getattr(self, "_viv_reuse_prompt_embeds", None)
         previous_save_final_latents = getattr(self, "_viv_save_final_latents", None)
         previous_save_prediction_latents = getattr(
             self, "_viv_save_prediction_latents", None
         )
-        previous_skip_reused_steps = getattr(self, "_viv_skip_reused_steps", None)
+        previous_skip_reused_computation = getattr(
+            self, "_viv_skip_reused_computation", None
+        )
         previous_suppress_prediction_latent_save = getattr(
             self, "_viv_suppress_prediction_latent_save", None
         )
@@ -62,17 +65,23 @@ def install_wan_latent_capture() -> None:
         self._viv_reuse_latent_prefix = _reuse_prefix_from_request(req)
         self._viv_reuse_predictions = _reuse_predictions_from_request(req)
         self._viv_reuse_final_latent = _reuse_final_latent_from_request(req)
+        self._viv_reuse_prompt_embeds = _reuse_prompt_embeds_from_request(req)
         self._viv_save_final_latents = _save_final_latents_from_request(req)
         self._viv_save_prediction_latents = (
             _save_prediction_latents_from_request(req)
         )
-        self._viv_skip_reused_steps = _skip_reused_steps_from_request(req)
+        self._viv_skip_reused_computation = (
+            _skip_reused_computation_from_request(req)
+        )
         self._viv_suppress_prediction_latent_save = False
         self._viv_save_prompt_embeds = _save_prompt_embeds_from_request(req)
         self._viv_sigma_schedule_path = _sigma_schedule_path_from_request(req)
         self._viv_sigma_schedule = None
         try:
-            if _reuse_prompt_embeds_from_request(req):
+            if (
+                _reuse_prompt_embeds_from_request(req)
+                and _skip_reused_computation_from_request(req)
+            ):
                 reuse_prefix = getattr(self, "_viv_reuse_latent_prefix", None)
                 if reuse_prefix is None:
                     raise ValueError("missing prompt embedding reuse source prefix")
@@ -96,9 +105,10 @@ def install_wan_latent_capture() -> None:
             self._viv_reuse_latent_prefix = previous_reuse_prefix
             self._viv_reuse_predictions = previous_reuse_predictions
             self._viv_reuse_final_latent = previous_reuse_final_latent
+            self._viv_reuse_prompt_embeds = previous_reuse_prompt_embeds
             self._viv_save_final_latents = previous_save_final_latents
             self._viv_save_prediction_latents = previous_save_prediction_latents
-            self._viv_skip_reused_steps = previous_skip_reused_steps
+            self._viv_skip_reused_computation = previous_skip_reused_computation
             self._viv_suppress_prediction_latent_save = (
                 previous_suppress_prediction_latent_save
             )
@@ -110,11 +120,14 @@ def install_wan_latent_capture() -> None:
         previous_step_idx = getattr(self, "_viv_step_idx", None)
         previous_sigma_schedule = getattr(self, "_viv_sigma_schedule", None)
         reuse_predictions = getattr(self, "_viv_reuse_predictions", None)
+        skip_reused_computation = bool(
+            getattr(self, "_viv_skip_reused_computation", False)
+        )
         self._viv_step_idx = 0
         self._viv_sigma_schedule = []
         try:
+            values = _diffuse_arguments(original_diffuse, self, args, kwargs)
             if getattr(self, "_viv_save_prompt_embeds", False):
-                values = _diffuse_arguments(original_diffuse, self, args, kwargs)
                 _save_prompt_embeddings(
                     prompt_embeddings_path_from_prefix(
                         getattr(self, "_viv_prompt_embeds_prefix", None)
@@ -125,15 +138,23 @@ def install_wan_latent_capture() -> None:
                         "seed": getattr(self, "_viv_seed", None),
                     },
                 )
+            if (
+                getattr(self, "_viv_reuse_prompt_embeds", False)
+                and not skip_reused_computation
+            ):
+                _replace_with_reused_prompt_embeddings(self, values)
+            if (
+                getattr(self, "_viv_reuse_final_latent", False)
+                and skip_reused_computation
+            ):
+                return _load_reused_final_latents(self, values["latents"])
             if reuse_predictions is None:
-                latents = original_diffuse(self, *args, **kwargs)
+                latents = _call_diffuse_with_arguments(original_diffuse, values)
             else:
                 latents = _diffuse_with_reused_denoising(
                     self,
-                    original_diffuse,
+                    values,
                     reuse_predictions,
-                    *args,
-                    **kwargs,
                 )
             final_latent_path = _final_noise_latent_path_from_prefix(
                 getattr(self, "_viv_latent_prefix", None)
@@ -544,10 +565,10 @@ def _save_prediction_latents_from_request(req: Any) -> bool:
     return _truthy(extra_args.get(SAVE_PREDICTION_LATENTS_EXTRA_ARG))
 
 
-def _skip_reused_steps_from_request(req: Any) -> bool:
+def _skip_reused_computation_from_request(req: Any) -> bool:
     sampling_params = getattr(req, "sampling_params", None)
     extra_args = getattr(sampling_params, "extra_args", None) or {}
-    return _truthy(extra_args.get(SKIP_REUSED_STEPS_EXTRA_ARG))
+    return _truthy(extra_args.get(SKIP_REUSED_COMPUTATION_EXTRA_ARG))
 
 
 def _save_prompt_embeds_from_request(req: Any) -> bool:
@@ -651,18 +672,33 @@ def _diffuse_arguments(
     return bound.arguments
 
 
+def _call_diffuse_with_arguments(original_diffuse: Any, values: dict[str, Any]) -> Any:
+    call_values = dict(values)
+    self = call_values.pop("self")
+    return original_diffuse(self, **call_values)
+
+
+def _replace_with_reused_prompt_embeddings(self: Any, values: dict[str, Any]) -> None:
+    reuse_prefix = getattr(self, "_viv_reuse_latent_prefix", None)
+    if reuse_prefix is None:
+        raise ValueError("missing prompt embedding reuse source prefix")
+    prompt_embeds, negative_prompt_embeds = load_prompt_embeddings(
+        prompt_embeddings_path(reuse_prefix),
+        device=values["latents"].device,
+        dtype=values["dtype"],
+    )
+    values["prompt_embeds"] = prompt_embeds
+    values["negative_prompt_embeds"] = negative_prompt_embeds
+
+
 def _diffuse_with_reused_denoising(
     self: Any,
-    original_diffuse: Any,
+    values: dict[str, Any],
     reuse_predictions: int,
-    *args: Any,
-    **kwargs: Any,
 ) -> Any:
     from vllm_omni.diffusion.forward_context import (
         set_forward_context_denoise_step_idx,
     )
-
-    values = _diffuse_arguments(original_diffuse, self, args, kwargs)
 
     latents = values["latents"]
     timesteps = values["timesteps"]
@@ -677,7 +713,9 @@ def _diffuse_with_reused_denoising(
     first_frame_mask = values["first_frame_mask"]
 
     reuse_prefix = getattr(self, "_viv_reuse_latent_prefix", None)
-    skip_reused_steps = bool(getattr(self, "_viv_skip_reused_steps", False))
+    skip_reused_computation = bool(
+        getattr(self, "_viv_skip_reused_computation", False)
+    )
     if reuse_prefix is None:
         raise ValueError("missing latent reuse source prefix")
     if reuse_predictions > len(timesteps):
@@ -698,7 +736,7 @@ def _diffuse_with_reused_denoising(
             self._current_timestep = t
             set_forward_context_denoise_step_idx(step_idx)
 
-            if step_idx < reuse_predictions and skip_reused_steps:
+            if step_idx < reuse_predictions and skip_reused_computation:
                 latent_path = _denoising_step_latent_path_from_prefix(
                     reuse_prefix, step_idx
                 )
