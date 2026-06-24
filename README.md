@@ -110,7 +110,6 @@ The JSON sidecar records the generation parameters and runtime environment:
   "final_noise_latent_reused": false,
   "prediction_latents_reused": 0,
   "prompt_embeds_reused": false,
-  "original_prediction_latents_saved": false,
   "reused_latents_from": null,
   "reused_prompt_embeds_from": null,
   "height": 480,
@@ -144,7 +143,6 @@ Notes about some of the fields:
 - `generation_id` is a short random identifier for the run
 - `reused_latents_from` records the source generation's `generation_id`
 - `sigma_schedule` records the actual sigma value used for each denoising step
-- `original_prediction_latents_saved` records whether reused prediction steps ran fresh model inference and saved those fresh predictions
 
 ## Analysis
 

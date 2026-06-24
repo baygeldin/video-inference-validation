@@ -129,12 +129,6 @@ class OfflineVideoGenerator:
             else None
         )
         reused_prediction_latents = reuse_predictions or 0
-        original_prediction_latents_saved = (
-            reused_prediction_latents > 0
-            and self.latent_reuse is not None
-            and not self.latent_reuse.skip_reused_computation
-            and self.save_prediction_latents
-        )
         generated_initial_latents = None
         if not (reuse_initial_latent and skip_reused_computation):
             generated_initial_latents = _initial_noise_latents(self.config, seed)
@@ -290,7 +284,6 @@ class OfflineVideoGenerator:
             final_noise_latent_reused=reuse_final_latent,
             prediction_latents_reused=reused_prediction_latents,
             prompt_embeds_reused=reuse_prompt_embeds,
-            original_prediction_latents_saved=original_prediction_latents_saved,
             reused_latents_from=reused_latents_from,
             reused_prompt_embeds_from=reused_prompt_embeds_from,
         )

@@ -45,9 +45,6 @@ def write_sidecar_metadata(
         "final_noise_latent_reused": result.final_noise_latent_reused,
         "prediction_latents_reused": result.prediction_latents_reused,
         "prompt_embeds_reused": result.prompt_embeds_reused,
-        "original_prediction_latents_saved": (
-            result.original_prediction_latents_saved
-        ),
         "reused_latents_from": result.reused_latents_from,
         "reused_prompt_embeds_from": result.reused_prompt_embeds_from,
         "height": config.height,
