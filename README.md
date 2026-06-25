@@ -215,7 +215,7 @@ viv compare \
 Add one or more comparison flags to choose what the report contains:
 - `--final-latents` reports RMSE, relative L2 error, and cosine similarity for each final latent tensor.
 - `--video-files` reports mean/min/max per-frame SSIM for each generated video file.
-- `--predictions` reports mean/min/max RMSE, relative L1/L2 error, cosine similarity, SQNR, Pearson correlation, NRMSE, and per-channel prediction drift metrics across matching denoising prediction latents.
+- `--predictions` reports sigma, relative L2 error, and cosine similarity for each matching denoising prediction latent.
 
 ```json
 {
@@ -240,63 +240,14 @@ Add one or more comparison flags to choose what the report contains:
             "relative_l2_error": 0.0001,
             "cosine_similarity": 0.9999
           },
-          "predictions": {
-            "mean_rmse": 0.001,
-            "min_rmse": 0.0,
-            "max_rmse": 0.01,
-            "mean_relative_l1_error": 0.0001,
-            "min_relative_l1_error": 0.0,
-            "max_relative_l1_error": 0.001,
-            "mean_relative_l2_error": 0.0001,
-            "min_relative_l2_error": 0.0,
-            "max_relative_l2_error": 0.001,
-            "mean_cosine_similarity": 0.9999,
-            "min_cosine_similarity": 0.999,
-            "max_cosine_similarity": 1.0,
-            "mean_sqnr_db": 80.0,
-            "min_sqnr_db": 70.0,
-            "mean_pearson_correlation": 0.9999,
-            "min_pearson_correlation": 0.999,
-            "max_pearson_correlation": 1.0,
-            "mean_nrmse": 0.0001,
-            "min_nrmse": 0.0,
-            "max_nrmse": 0.001,
-            "mean_per_channel_relative_l2_error": 0.0001,
-            "mean_rms_per_channel_relative_l2_error": 0.0001,
-            "mean_per_channel_cosine_similarity": 0.9999,
-            "mean_per_channel_sqnr_db": 80.0,
-            "mean_per_channel_pearson_correlation": 0.9999,
-            "mean_per_channel_nrmse": 0.0001,
-            "steps": [
-              {
-                "step_idx": 0,
-                "rmse": 0.0,
-                "relative_l1_error": 0.0,
-                "relative_l2_error": 0.0,
-                "cosine_similarity": 1.0,
-                "sqnr_db": 80.0,
-                "pearson_correlation": 1.0,
-                "nrmse": 0.0,
-                "per_channel_relative_l2_error": [0.0],
-                "mean_per_channel_relative_l2_error": 0.0,
-                "rms_per_channel_relative_l2_error": 0.0,
-                "max_per_channel_relative_l2_error": 0.0,
-                "per_channel_cosine_similarity": [1.0],
-                "mean_per_channel_cosine_similarity": 1.0,
-                "min_per_channel_cosine_similarity": 1.0,
-                "per_channel_sqnr_db": [80.0],
-                "mean_per_channel_sqnr_db": 80.0,
-                "min_per_channel_sqnr_db": 80.0,
-                "per_channel_pearson_correlation": [1.0],
-                "mean_per_channel_pearson_correlation": 1.0,
-                "min_per_channel_pearson_correlation": 1.0,
-                "per_channel_nrmse": [0.0],
-                "mean_per_channel_nrmse": 0.0,
-                "rms_per_channel_nrmse": 0.0,
-                "max_per_channel_nrmse": 0.0
-              }
-            ]
-          }
+          "predictions": [
+            {
+              "step_idx": 0,
+              "sigma": 0.9999,
+              "relative_l2_error": 0.0,
+              "cosine_similarity": 1.0
+            }
+          ]
         }
       ]
     }
