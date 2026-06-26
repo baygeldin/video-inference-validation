@@ -97,27 +97,19 @@ That overlap is the core problem. A threshold permissive enough to accept the si
 
 It is not clear exactly why the A100 TP=2 configuration performs better than a single A100. It is counterintuitive because TP=2 introduces more hardware variation, but the likely explanation is that the A100 TP=2 setup uses a kernel path that happens to land closer to H100 numerics than the single-A100 setup.
 
-## Implications
-
-Two implications follow from these results. First, the validation signal is not uniformly strong across the denoising trajectory: the high-noise bucket is weak enough that partial INT4 execution could plausibly pass. Second, and more importantly, the single-A100 sanity check shows that **the validation threshold is not only model-dependent; it is executor/verifier-pair-dependent**. For a decentralized network, that is operationally awkward:
-
-- The network would need to know which GPU and kernel combinations can validate each other.
-- Each accepted pair would need calibration data and thresholds.
-- Verifier availability would become constrained by matching hardware, not just model support.
-
-This does not make full-trace validation useless. It means full-trace validation is reliable only under a hardware compatibility policy.
-
 ## Conclusion
 
-For Wan2.2-T2V-A14B, I do not think we can reliably distinguish the full model from the INT4/W4A16 model across arbitrary verifier hardware. The malicious deviation is too close to normal numeric drift from some honest verifier configurations.
+For Wan2.2-T2V-A14B, I do not think we can reliably distinguish the full model from the INT4 model across arbitrary verifier hardware. The malicious deviation is too close to normal numeric drift from some honest verifier configurations.
 
-The safest decentralized strategy is to deploy the "least common denominator" model variant: choose a baseline that does not have a cheaper counterpart capable of passing as that baseline. If INT4 quality is acceptable, then deploying INT4 directly may be cleaner than trying to prove that everyone ran BF16.
+One solution is to narrow validation to the exact same GPU configuration. This may be possible in a large network, but it assumes there is always a verifier available with the same GPU configuration and the same model variant as the executor. That requires a separate threat analysis. We could also loosen the requirement slightly by identifying specific GPU pairs that are workable. For example, if a B200 executor could be verified by an H200 verifier while still catching every dishonest inference, that pair could be allowed. However, this would complicate the protocol even more and require cross-calibration across many GPU combinations.
 
-That does not necessarily mean lower-quality outputs. The INT4 generations are often close to the full-model generations, and some are subjectively competitive. You can compare:
+The safest strategy for a decentralized network is to deploy the "least common denominator" model variant: choose a baseline that does not have a cheaper counterpart capable of passing as that baseline. For such models, validation thresholds can be generous enough to absorb benign hardware differences.
+
+That does not necessarily mean lower-quality outputs. The INT4 generations are often close to the full-model generations, and some could even be subjectively better. You can compare:
 
 - INT4 medium outputs: `notes/03-validation-strategy/artifacts/medium__h100__int4_quantization`
 - Full-model medium outputs: `notes/03-validation-strategy/artifacts/medium__h100__default`
 - INT4 pilot outputs: `notes/03-validation-strategy/artifacts/pilot__h100__int4_quantization`
 - Full-model pilot outputs from the previous experiment: `notes/02-intermediate-artifacts/artifacts/h100_sxm__default`
 
-For the full `medium` set, see `notes/03-validation-strategy/artifacts/comparisons/medium__h100_int4_vs_h100.json`. Across 105 examples, the median per-prompt relative L2 error is `0.08555`, corresponding to a similarity score of `0.921`. The worst per-prompt median is `0.15015`, corresponding to a similarity score of `0.869`.
+It is also worth noting that across 105 examples, the median per-prompt relative L2 error for the INT4 model is `0.08555`, corresponding to a similarity score of `0.921`. The worst per-prompt median is `0.15015`, corresponding to a similarity score of `0.869` (see `notes/03-validation-strategy/artifacts/comparisons/medium__h100_int4_vs_h100.json`).
