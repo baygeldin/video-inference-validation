@@ -2,18 +2,18 @@
 
 ## TL;DR
 
-The previous experiments showed that final videos are not enough for validation, and that saving only a prefix of the diffusion trace is also not enough. A verifier needs access to the full execution trace: every model prediction at every denoising step.
+The previous experiment showed that saving only part of the DiT model predictions is not enough to protect against a dishonest executor running fewer denoising steps than claimed. A verifier needs access to the full inference trace: every model prediction at every denoising step.
 
-This experiment tested whether a full-trace validation strategy can catch the remaining malicious deviation: running Wan2.2-T2V-A14B with INT4/W4A16 quantized weights while claiming to have run the full model.
+This experiment tested whether a full-trace validation strategy can catch the remaining malicious deviation available to us: running the INT4 quantized version of Wan2.2-T2V-A14B while claiming to have run the full model.
 
-The short answer is: **full traces help, but they do not remove the need for hardware-aware calibration**. With a narrowly chosen verifier configuration, a two-bucket relative L2 threshold caught all INT4 pilot runs with zero honest rejections. But a sanity check with a different honest verifier configuration overlapped with the INT4 deviation, which means the threshold would either reject honest work or allow the quantized run.
+The short answer is: **full traces help, but the result still depends heavily on the verifier GPU configuration**. In these experiments, a verifier running two A100 GPUs with TP=2 tensor parallelism could reliably catch every dishonest INT4 run from a single-H100 executor while a verifier running a single A100 without tensor parallelism could not.
 
 For Wan2.2-T2V-A14B, the practical choices are:
 
+- Restrict validation to calibrated executor/verifier hardware pairs.
 - Deploy the quantized model as the baseline model, if its quality is acceptable.
-- Restrict validation to calibrated executor/verifier hardware pairs and maintain thresholds per pair.
 
-The second option may work, but it changes the problem from "validate this model" to "validate this model on this exact hardware and kernel family."
+I believe the second option is preferable, as explained in the conclusion.
 
 ## Experiment design
 
@@ -30,8 +30,8 @@ For the `medium` set, I generated each prompt on H100 in two configurations:
 Then I compared the saved prediction traces in three validation settings:
 
 - **Malicious case:** H100 INT4 executor checked by an H100 full-model verifier.
-- **Initial honest case:** H100 full-model executor checked by an A100 TP=2 verifier.
-- **Sanity-check honest case:** H100 full-model executor checked by a single A100 verifier.
+- **Initial honest case:** H100 full-model executor checked by a two-GPU A100 TP=2 verifier.
+- **Sanity-check honest case:** H100 full-model executor checked by a single-A100 verifier without tensor parallelism.
 
 For each comparison, I pinned the initial latent and prompt embeddings. At each denoising step, the verifier recomputed the model prediction, compared it with the executor's saved prediction, and then advanced the scheduler using the executor's saved prediction. That keeps the executor and verifier model states synchronized after every step, so the metric measures per-step prediction disagreement rather than accumulated latent drift.
 
@@ -62,30 +62,30 @@ The split matters because Wan2.2 uses different experts before and after the bou
 
 ## Results
 
-The first result was encouraging. When the honest reference was H100 executor -> A100 TP=2 verifier, a two-bucket threshold separated the INT4 runs from the honest runs.
+The first result was encouraging. When the honest reference was H100 executor -> two-GPU A100 TP=2 verifier, a two-bucket threshold separated the INT4 runs from the honest runs.
 
 The separation came from the low-noise bucket:
 
-- H100 honest -> A100 TP=2 low-noise per-prompt medians: max `0.029`.
+- H100 honest -> two-GPU A100 TP=2 low-noise per-prompt medians: max `0.029`.
 - H100 INT4 -> H100 low-noise per-prompt medians: min `0.048`.
 
-So, under this verifier assumption, every INT4 pilot prompt failed while every honest H100 -> A100 TP=2 prompt passed.
+So, under this verifier assumption, every INT4 pilot prompt failed while every honest H100 -> two-GPU A100 TP=2 prompt passed.
 
-However, that result did not survive the sanity check. When the honest verifier was a single A100 rather than A100 TP=2, the low-noise bucket moved into the same range as INT4:
+However, that result did not survive the sanity check. When the honest verifier was a single A100 rather than two A100s with TP=2, the low-noise bucket moved into the same range as INT4:
 
-- H100 honest -> single A100 low-noise per-prompt medians: `0.043` to `0.096`.
+- H100 honest -> single-A100 low-noise per-prompt medians: `0.043` to `0.096`.
 - H100 INT4 -> H100 low-noise per-prompt medians: `0.048` to `0.102`.
 
 That overlap is the core problem. A threshold permissive enough to accept the single-A100 honest verifier would also accept at least some INT4 executions. A threshold strict enough to catch INT4 would reject honest single-A100 verification.
 
-The likely explanation is kernel-level numeric behavior. A100 TP=2 appears to use a kernel path that happens to land closer to H100 numerics after the expert boundary, while single A100 lands farther away. The important point is not the exact kernel detail; it is that normal verifier configuration changes can be as large as the malicious quantization deviation.
+The likely explanation is kernel-level numeric behavior. The two-GPU A100 TP=2 setup appears to use a kernel path that happens to land closer to H100 numerics after the expert boundary, while the single-A100 setup lands farther away. The important point is not the exact kernel detail; it is that normal verifier configuration changes can be as large as the malicious quantization deviation.
 
 ### Per-prompt traces
 
 The plots below were generated from the comparison files in `notes/03-validation-strategy/artifacts/comparisons`. Each plot shows relative L2 error by denoising step for one pilot prompt:
 
-- Blue: H100 honest executor -> A100 TP=2 verifier.
-- Green: H100 honest executor -> single A100 verifier.
+- Blue: H100 honest executor -> two-GPU A100 TP=2 verifier.
+- Green: H100 honest executor -> single-A100 verifier.
 - Red: H100 INT4 executor -> H100 verifier.
 
 <img src="plots/action-binding-001.png" alt="Relative L2 error by step for action-binding-001" width="500">
