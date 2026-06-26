@@ -59,6 +59,6 @@ thus, i think the best strategy for a decentralized network is to deploy the "le
 
 it doesn't mean that the results would be subpar though. in case of INT4 quantization (more precicely it's W4A16, i.e. weights are 4bit, but all math is in 16 bit), the results are pretty close, sometimes one could say even better subjectively.
 
-check out all of the videos generated with int4 in `notes/03-validation-strategy/artifacts/h100_sxm__int4_quantization`. compare them to `notes/03-validation-strategy/artifacts/h100_default`.
+check out all of the videos generated with int4 in `notes/03-validation-strategy/artifacts/medium__h100_sxm__int4_quantization`. compare them to `notes/03-validation-strategy/artifacts/medium__h100_default`. or compare the pilot int4 generations in `notes/03-validation-strategy/artifacts/pilot__h100__int4_quantization` with the honest pilot generations from the previous experiment in  `notes/02-intermediate-artifacts/artifacts/h100_sxm__default`.
 
 also take a look at `notes/03-validation-strategy/artifacts/comparisons/medium__h100_int4_vs_h100.json`. for each generated example from `medium` dataset it contains the median per-step relative L2 error. if we compute the median value per-example then we get `0.086`, i.e. 92% similarity score as per out formula. the maximum is `0.15`, or 86% similarity in the forst case.
