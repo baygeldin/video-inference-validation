@@ -29,9 +29,10 @@ class GenerationArtifacts:
 
 @dataclass(frozen=True)
 class ExampleArtifacts:
-    final_latent_path: Path
-    video_path: Path
+    final_latent_path: Path | None
+    video_path: Path | None
     prediction_latent_paths: dict[int, Path]
+    sigma_schedule: list[float] | None
 
 
 @dataclass(frozen=True)
@@ -41,18 +42,42 @@ class VideoInfo:
     frame_count: int
 
 
+@dataclass(frozen=True)
+class ComparisonOptions:
+    final_latents: bool = True
+    video_files: bool = True
+    predictions: bool = True
+
+    def any_enabled(self) -> bool:
+        return self.final_latents or self.video_files or self.predictions
+
+
 def compare_generations(
     output_path: Path,
     baseline_dir: Path,
     generation_dirs: list[Path],
+    *,
+    final_latents: bool = True,
+    video_files: bool = True,
+    predictions: bool = True,
 ) -> Path:
     if not generation_dirs:
         raise ValueError("at least one generation path is required")
     if output_path.exists() and output_path.is_dir():
         raise ValueError(f"{output_path} is a directory; expected a JSON file path")
 
-    baseline = _read_generation_artifacts(baseline_dir)
-    generations = [_read_generation_artifacts(path) for path in generation_dirs]
+    options = ComparisonOptions(
+        final_latents=final_latents,
+        video_files=video_files,
+        predictions=predictions,
+    )
+    if not options.any_enabled():
+        raise ValueError("at least one comparison type must be enabled")
+
+    baseline = _read_generation_artifacts(baseline_dir, options)
+    generations = [
+        _read_generation_artifacts(path, options) for path in generation_dirs
+    ]
     common_prompt_ids = sorted(
         set.intersection(
             set(baseline.examples),
@@ -70,21 +95,12 @@ def compare_generations(
                 "gpu_model": generation.gpu_model,
                 "config_name": generation.config_name,
                 "examples": [
-                    {
-                        "prompt_id": prompt_id,
-                        "video_file": _video_file_metrics(
-                            baseline.examples[prompt_id].video_path,
-                            generation.examples[prompt_id].video_path,
-                        ),
-                        "final_latent": _latent_metrics(
-                            baseline.examples[prompt_id].final_latent_path,
-                            generation.examples[prompt_id].final_latent_path,
-                        ),
-                        "predictions": _prediction_metrics(
-                            baseline.examples[prompt_id].prediction_latent_paths,
-                            generation.examples[prompt_id].prediction_latent_paths,
-                        ),
-                    }
+                    _example_comparison(
+                        prompt_id,
+                        baseline.examples[prompt_id],
+                        generation.examples[prompt_id],
+                        options,
+                    )
                     for prompt_id in common_prompt_ids
                 ],
             }
@@ -101,7 +117,10 @@ def compare_generations(
     return output_path
 
 
-def _read_generation_artifacts(generation_dir: Path) -> GenerationArtifacts:
+def _read_generation_artifacts(
+    generation_dir: Path,
+    options: ComparisonOptions,
+) -> GenerationArtifacts:
     if not generation_dir.is_dir():
         raise ValueError(f"{generation_dir} is not a directory")
 
@@ -128,14 +147,23 @@ def _read_generation_artifacts(generation_dir: Path) -> GenerationArtifacts:
 
         final_latent_path = generation_dir / f"{prompt_id}{FINAL_LATENT_SUFFIX}"
         video_path = generation_dir / f"{prompt_id}{VIDEO_SUFFIX}"
-        if final_latent_path.exists() and video_path.exists():
+        prediction_latent_paths = _prediction_latent_paths(
+            generation_dir,
+            prompt_id,
+        )
+        if _has_requested_artifacts(
+            final_latent_path,
+            video_path,
+            prediction_latent_paths,
+            options,
+        ):
             examples[prompt_id] = ExampleArtifacts(
-                final_latent_path=final_latent_path,
-                video_path=video_path,
-                prediction_latent_paths=_prediction_latent_paths(
-                    generation_dir,
-                    prompt_id,
+                final_latent_path=(
+                    final_latent_path if final_latent_path.exists() else None
                 ),
+                video_path=video_path if video_path.exists() else None,
+                prediction_latent_paths=prediction_latent_paths,
+                sigma_schedule=_metadata_sigma_schedule(metadata_path, metadata),
             )
 
     if len(config_names) != 1:
@@ -150,7 +178,8 @@ def _read_generation_artifacts(generation_dir: Path) -> GenerationArtifacts:
         )
     if not examples:
         raise ValueError(
-            f"{generation_dir} does not contain comparable final latent and video files"
+            f"{generation_dir} does not contain comparable artifacts for the "
+            "selected comparison types"
         )
 
     return GenerationArtifacts(
@@ -158,6 +187,54 @@ def _read_generation_artifacts(generation_dir: Path) -> GenerationArtifacts:
         config_name=next(iter(config_names)),
         examples=examples,
     )
+
+
+def _has_requested_artifacts(
+    final_latent_path: Path,
+    video_path: Path,
+    prediction_latent_paths: dict[int, Path],
+    options: ComparisonOptions,
+) -> bool:
+    if options.final_latents and not final_latent_path.exists():
+        return False
+    if options.video_files and not video_path.exists():
+        return False
+    if options.predictions and not prediction_latent_paths:
+        return False
+    return True
+
+
+def _example_comparison(
+    prompt_id: str,
+    baseline: ExampleArtifacts,
+    generation: ExampleArtifacts,
+    options: ComparisonOptions,
+) -> dict[str, Any]:
+    metrics: dict[str, Any] = {"prompt_id": prompt_id}
+    if options.video_files:
+        if baseline.video_path is None or generation.video_path is None:
+            raise ValueError(f"missing video file for prompt {prompt_id}")
+        metrics["video_file"] = _video_file_metrics(
+            baseline.video_path,
+            generation.video_path,
+        )
+    if options.final_latents:
+        if (
+            baseline.final_latent_path is None
+            or generation.final_latent_path is None
+        ):
+            raise ValueError(f"missing final latent for prompt {prompt_id}")
+        metrics["final_latent"] = _latent_metrics(
+            baseline.final_latent_path,
+            generation.final_latent_path,
+        )
+    if options.predictions:
+        metrics["predictions"] = _prediction_metrics(
+            baseline.prediction_latent_paths,
+            generation.prediction_latent_paths,
+            generation.sigma_schedule,
+        )
+    return metrics
 
 
 def _read_metadata(metadata_path: Path) -> dict[str, Any]:
@@ -179,6 +256,22 @@ def _metadata_string(
     return value
 
 
+def _metadata_sigma_schedule(
+    metadata_path: Path,
+    metadata: dict[str, Any],
+) -> list[float] | None:
+    parameters = metadata.get("parameters")
+    if isinstance(parameters, dict):
+        schedule = parameters.get("sigma_schedule")
+    else:
+        schedule = metadata.get("sigma_schedule")
+    if schedule is None:
+        return None
+    if not isinstance(schedule, list):
+        raise ValueError(f"{metadata_path} sigma_schedule must be an array")
+    return [float(sigma) for sigma in schedule]
+
+
 def _latent_metrics(
     baseline_path: Path,
     generation_path: Path,
@@ -197,6 +290,7 @@ def _latent_metrics(
     diff = generation - baseline
     rmse = torch.sqrt(torch.mean(torch.square(diff))).item()
     baseline_norm = torch.linalg.vector_norm(baseline).item()
+    generation_norm = torch.linalg.vector_norm(generation).item()
     diff_norm = torch.linalg.vector_norm(diff).item()
     if baseline_norm == 0.0:
         relative_l2_error = 0.0 if diff_norm == 0.0 else math.inf
@@ -204,16 +298,30 @@ def _latent_metrics(
         relative_l2_error = diff_norm / baseline_norm
     if not math.isfinite(relative_l2_error):
         raise ValueError(f"relative L2 is not finite for {generation_path.name}")
+    if baseline_norm == 0.0 or generation_norm == 0.0:
+        cosine_similarity = 1.0 if diff_norm == 0.0 else math.nan
+    else:
+        cosine_similarity = (
+            torch.sum(baseline * generation).item()
+            / (baseline_norm * generation_norm)
+        )
+        cosine_similarity = max(-1.0, min(1.0, cosine_similarity))
+    if not math.isfinite(cosine_similarity):
+        raise ValueError(
+            f"cosine similarity is not finite for {generation_path.name}"
+        )
     return {
         "rmse": rmse,
         "relative_l2_error": relative_l2_error,
+        "cosine_similarity": cosine_similarity,
     }
 
 
 def _prediction_metrics(
     baseline_paths: dict[int, Path],
     generation_paths: dict[int, Path],
-) -> dict[str, Any]:
+    generation_sigma_schedule: list[float] | None,
+) -> list[dict[str, Any]]:
     common_steps = sorted(set(baseline_paths) & set(generation_paths))
     if not common_steps:
         raise ValueError("no matching prediction latent steps to compare")
@@ -221,22 +329,33 @@ def _prediction_metrics(
     step_metrics = []
     for step in common_steps:
         metrics = _latent_metrics(baseline_paths[step], generation_paths[step])
-        step_metrics.append({"step_idx": step, **metrics})
-    rmses = [metrics["rmse"] for metrics in step_metrics]
-    relative_l2_errors = [
-        metrics["relative_l2_error"] for metrics in step_metrics
-    ]
-    return {
-        "mean_rmse": sum(rmses) / len(rmses),
-        "min_rmse": min(rmses),
-        "max_rmse": max(rmses),
-        "mean_relative_l2_error": (
-            sum(relative_l2_errors) / len(relative_l2_errors)
-        ),
-        "min_relative_l2_error": min(relative_l2_errors),
-        "max_relative_l2_error": max(relative_l2_errors),
-        "steps": step_metrics,
-    }
+        step_metrics.append(
+            {
+                "step_idx": step,
+                "sigma": _prediction_sigma(
+                    step,
+                    generation_paths[step],
+                    generation_sigma_schedule,
+                ),
+                "relative_l2_error": metrics["relative_l2_error"],
+                "cosine_similarity": metrics["cosine_similarity"],
+            }
+        )
+    return step_metrics
+
+
+def _prediction_sigma(
+    step: int,
+    prediction_path: Path,
+    sigma_schedule: list[float] | None,
+) -> float:
+    if sigma_schedule is not None and step < len(sigma_schedule):
+        return sigma_schedule[step]
+    metadata = _safetensors_metadata(prediction_path)
+    sigma = metadata.get("sigma")
+    if sigma is None:
+        raise ValueError(f"{prediction_path} does not contain sigma metadata")
+    return float(sigma)
 
 
 def _prediction_latent_paths(generation_dir: Path, prompt_id: str) -> dict[int, Path]:
@@ -247,6 +366,14 @@ def _prediction_latent_paths(generation_dir: Path, prompt_id: str) -> dict[int, 
             continue
         paths[int(match.group("step"))] = path
     return paths
+
+
+def _safetensors_metadata(latent_path: Path) -> dict[str, str]:
+    from safetensors import safe_open
+
+    with safe_open(str(latent_path), framework="pt", device="cpu") as tensors:
+        metadata = tensors.metadata() or {}
+    return dict(metadata)
 
 
 def _load_latent_tensor(latent_path: Path) -> "torch.Tensor":

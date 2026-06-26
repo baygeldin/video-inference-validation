@@ -205,11 +205,17 @@ Saved latent runs can be compared with `viv compare`. The command writes a JSON 
 viv compare \
   --output /workspace/comparison.json \
   --baseline /workspace/baseline-outputs \
+  --final-latents \
+  --video-files \
+  --predictions \
   /workspace/experiment-a \
   /workspace/experiment-b
 ```
 
-Comparison reports RMSE and relative L2 error for each final latent tensor, mean/min/max RMSE and relative L2 error across matching denoising prediction latents, per-step prediction drift metrics, and mean/min/max per-frame SSIM for each generated video file.
+Add one or more comparison flags to choose what the report contains:
+- `--final-latents` reports RMSE, relative L2 error, and cosine similarity for each final latent tensor.
+- `--video-files` reports mean/min/max per-frame SSIM for each generated video file.
+- `--predictions` reports sigma, relative L2 error, and cosine similarity for each matching denoising prediction latent.
 
 ```json
 {
@@ -231,23 +237,17 @@ Comparison reports RMSE and relative L2 error for each final latent tensor, mean
           },
           "final_latent": {
             "rmse": 0.001,
-            "relative_l2_error": 0.0001
+            "relative_l2_error": 0.0001,
+            "cosine_similarity": 0.9999
           },
-          "predictions": {
-            "mean_rmse": 0.001,
-            "min_rmse": 0.0,
-            "max_rmse": 0.01,
-            "mean_relative_l2_error": 0.0001,
-            "min_relative_l2_error": 0.0,
-            "max_relative_l2_error": 0.001,
-            "steps": [
-              {
-                "step_idx": 0,
-                "rmse": 0.0,
-                "relative_l2_error": 0.0
-              }
-            ]
-          }
+          "predictions": [
+            {
+              "step_idx": 0,
+              "sigma": 0.9999,
+              "relative_l2_error": 0.0,
+              "cosine_similarity": 1.0
+            }
+          ]
         }
       ]
     }
