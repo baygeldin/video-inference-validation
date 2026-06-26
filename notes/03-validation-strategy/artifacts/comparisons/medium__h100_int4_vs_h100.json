@@ -1,0 +1,434 @@
+{
+  "baseline": {
+    "gpu_model": "NVIDIA H100 80GB HBM3",
+    "config_name": "int4_quantization"
+  },
+  "generations": [
+    {
+      "gpu_model": "NVIDIA H100 80GB HBM3",
+      "config_name": "default",
+      "examples": [
+        {
+          "prompt_id": "action-binding-008",
+          "predictions_median_relative_l2_error": 0.08291209221800355
+        },
+        {
+          "prompt_id": "action-binding-015",
+          "predictions_median_relative_l2_error": 0.07961766775808524
+        },
+        {
+          "prompt_id": "action-binding-029",
+          "predictions_median_relative_l2_error": 0.06060314316049651
+        },
+        {
+          "prompt_id": "action-binding-044",
+          "predictions_median_relative_l2_error": 0.13817771243209614
+        },
+        {
+          "prompt_id": "action-binding-058",
+          "predictions_median_relative_l2_error": 0.1104170947089278
+        },
+        {
+          "prompt_id": "action-binding-072",
+          "predictions_median_relative_l2_error": 0.07465292597172268
+        },
+        {
+          "prompt_id": "action-binding-086",
+          "predictions_median_relative_l2_error": 0.09900545006287856
+        },
+        {
+          "prompt_id": "action-binding-101",
+          "predictions_median_relative_l2_error": 0.14968678541394037
+        },
+        {
+          "prompt_id": "action-binding-115",
+          "predictions_median_relative_l2_error": 0.0907530757231094
+        },
+        {
+          "prompt_id": "action-binding-129",
+          "predictions_median_relative_l2_error": 0.10152510767911008
+        },
+        {
+          "prompt_id": "action-binding-143",
+          "predictions_median_relative_l2_error": 0.07055122896207702
+        },
+        {
+          "prompt_id": "action-binding-157",
+          "predictions_median_relative_l2_error": 0.10868597239200253
+        },
+        {
+          "prompt_id": "action-binding-172",
+          "predictions_median_relative_l2_error": 0.09027548961884052
+        },
+        {
+          "prompt_id": "action-binding-186",
+          "predictions_median_relative_l2_error": 0.08630667311034596
+        },
+        {
+          "prompt_id": "action-binding-193",
+          "predictions_median_relative_l2_error": 0.11395232780024783
+        },
+        {
+          "prompt_id": "consistent-attr-008",
+          "predictions_median_relative_l2_error": 0.08671787650509263
+        },
+        {
+          "prompt_id": "consistent-attr-015",
+          "predictions_median_relative_l2_error": 0.08813332407461716
+        },
+        {
+          "prompt_id": "consistent-attr-029",
+          "predictions_median_relative_l2_error": 0.07483186037724805
+        },
+        {
+          "prompt_id": "consistent-attr-044",
+          "predictions_median_relative_l2_error": 0.07588610096214463
+        },
+        {
+          "prompt_id": "consistent-attr-058",
+          "predictions_median_relative_l2_error": 0.07347329656032704
+        },
+        {
+          "prompt_id": "consistent-attr-072",
+          "predictions_median_relative_l2_error": 0.057366484311186114
+        },
+        {
+          "prompt_id": "consistent-attr-086",
+          "predictions_median_relative_l2_error": 0.07117615564452459
+        },
+        {
+          "prompt_id": "consistent-attr-101",
+          "predictions_median_relative_l2_error": 0.12894550880979594
+        },
+        {
+          "prompt_id": "consistent-attr-115",
+          "predictions_median_relative_l2_error": 0.12344304822350156
+        },
+        {
+          "prompt_id": "consistent-attr-129",
+          "predictions_median_relative_l2_error": 0.08055327742615215
+        },
+        {
+          "prompt_id": "consistent-attr-143",
+          "predictions_median_relative_l2_error": 0.07737426997256308
+        },
+        {
+          "prompt_id": "consistent-attr-157",
+          "predictions_median_relative_l2_error": 0.07639776844878508
+        },
+        {
+          "prompt_id": "consistent-attr-172",
+          "predictions_median_relative_l2_error": 0.09064113193069981
+        },
+        {
+          "prompt_id": "consistent-attr-186",
+          "predictions_median_relative_l2_error": 0.06524230718593785
+        },
+        {
+          "prompt_id": "consistent-attr-193",
+          "predictions_median_relative_l2_error": 0.09302008796172503
+        },
+        {
+          "prompt_id": "dynamic-attr-008",
+          "predictions_median_relative_l2_error": 0.09143108007287368
+        },
+        {
+          "prompt_id": "dynamic-attr-015",
+          "predictions_median_relative_l2_error": 0.11613508075187995
+        },
+        {
+          "prompt_id": "dynamic-attr-029",
+          "predictions_median_relative_l2_error": 0.08842984509903888
+        },
+        {
+          "prompt_id": "dynamic-attr-044",
+          "predictions_median_relative_l2_error": 0.05314058173817783
+        },
+        {
+          "prompt_id": "dynamic-attr-058",
+          "predictions_median_relative_l2_error": 0.0700184751981269
+        },
+        {
+          "prompt_id": "dynamic-attr-072",
+          "predictions_median_relative_l2_error": 0.04742529588996961
+        },
+        {
+          "prompt_id": "dynamic-attr-086",
+          "predictions_median_relative_l2_error": 0.041574611264968656
+        },
+        {
+          "prompt_id": "dynamic-attr-101",
+          "predictions_median_relative_l2_error": 0.06890501336880389
+        },
+        {
+          "prompt_id": "dynamic-attr-115",
+          "predictions_median_relative_l2_error": 0.08714565906891361
+        },
+        {
+          "prompt_id": "dynamic-attr-129",
+          "predictions_median_relative_l2_error": 0.08737551230851046
+        },
+        {
+          "prompt_id": "dynamic-attr-143",
+          "predictions_median_relative_l2_error": 0.04844389479396062
+        },
+        {
+          "prompt_id": "dynamic-attr-157",
+          "predictions_median_relative_l2_error": 0.08068275193585733
+        },
+        {
+          "prompt_id": "dynamic-attr-172",
+          "predictions_median_relative_l2_error": 0.061067833754472986
+        },
+        {
+          "prompt_id": "dynamic-attr-186",
+          "predictions_median_relative_l2_error": 0.06663916473189614
+        },
+        {
+          "prompt_id": "dynamic-attr-193",
+          "predictions_median_relative_l2_error": 0.06740815677608407
+        },
+        {
+          "prompt_id": "interaction-008",
+          "predictions_median_relative_l2_error": 0.12206164264521582
+        },
+        {
+          "prompt_id": "interaction-015",
+          "predictions_median_relative_l2_error": 0.13513714348819783
+        },
+        {
+          "prompt_id": "interaction-029",
+          "predictions_median_relative_l2_error": 0.07213206513210604
+        },
+        {
+          "prompt_id": "interaction-044",
+          "predictions_median_relative_l2_error": 0.06272616495864022
+        },
+        {
+          "prompt_id": "interaction-058",
+          "predictions_median_relative_l2_error": 0.112554778643454
+        },
+        {
+          "prompt_id": "interaction-072",
+          "predictions_median_relative_l2_error": 0.07616095412782789
+        },
+        {
+          "prompt_id": "interaction-086",
+          "predictions_median_relative_l2_error": 0.08987404522160987
+        },
+        {
+          "prompt_id": "interaction-101",
+          "predictions_median_relative_l2_error": 0.08542154731110008
+        },
+        {
+          "prompt_id": "interaction-115",
+          "predictions_median_relative_l2_error": 0.11502322886690372
+        },
+        {
+          "prompt_id": "interaction-129",
+          "predictions_median_relative_l2_error": 0.11399506198551251
+        },
+        {
+          "prompt_id": "interaction-143",
+          "predictions_median_relative_l2_error": 0.05909093531940329
+        },
+        {
+          "prompt_id": "interaction-157",
+          "predictions_median_relative_l2_error": 0.0724641245998135
+        },
+        {
+          "prompt_id": "interaction-172",
+          "predictions_median_relative_l2_error": 0.10353958340287238
+        },
+        {
+          "prompt_id": "interaction-186",
+          "predictions_median_relative_l2_error": 0.07252935042105282
+        },
+        {
+          "prompt_id": "interaction-193",
+          "predictions_median_relative_l2_error": 0.07268763107569609
+        },
+        {
+          "prompt_id": "motion-binding-008",
+          "predictions_median_relative_l2_error": 0.08468863814589256
+        },
+        {
+          "prompt_id": "motion-binding-015",
+          "predictions_median_relative_l2_error": 0.055493679015866215
+        },
+        {
+          "prompt_id": "motion-binding-029",
+          "predictions_median_relative_l2_error": 0.06855832627976947
+        },
+        {
+          "prompt_id": "motion-binding-044",
+          "predictions_median_relative_l2_error": 0.10093265876241919
+        },
+        {
+          "prompt_id": "motion-binding-058",
+          "predictions_median_relative_l2_error": 0.05364688143418171
+        },
+        {
+          "prompt_id": "motion-binding-072",
+          "predictions_median_relative_l2_error": 0.07466487579239664
+        },
+        {
+          "prompt_id": "motion-binding-086",
+          "predictions_median_relative_l2_error": 0.04856404816522632
+        },
+        {
+          "prompt_id": "motion-binding-101",
+          "predictions_median_relative_l2_error": 0.11629376854921594
+        },
+        {
+          "prompt_id": "motion-binding-115",
+          "predictions_median_relative_l2_error": 0.10367359945527509
+        },
+        {
+          "prompt_id": "motion-binding-129",
+          "predictions_median_relative_l2_error": 0.11423028830058174
+        },
+        {
+          "prompt_id": "motion-binding-143",
+          "predictions_median_relative_l2_error": 0.10087201108929049
+        },
+        {
+          "prompt_id": "motion-binding-157",
+          "predictions_median_relative_l2_error": 0.09448234092690802
+        },
+        {
+          "prompt_id": "motion-binding-172",
+          "predictions_median_relative_l2_error": 0.060528158526586745
+        },
+        {
+          "prompt_id": "motion-binding-186",
+          "predictions_median_relative_l2_error": 0.08857464864954778
+        },
+        {
+          "prompt_id": "motion-binding-193",
+          "predictions_median_relative_l2_error": 0.09416990004865763
+        },
+        {
+          "prompt_id": "numeracy-008",
+          "predictions_median_relative_l2_error": 0.06528130601641488
+        },
+        {
+          "prompt_id": "numeracy-015",
+          "predictions_median_relative_l2_error": 0.06440641046094814
+        },
+        {
+          "prompt_id": "numeracy-029",
+          "predictions_median_relative_l2_error": 0.07994734280410543
+        },
+        {
+          "prompt_id": "numeracy-044",
+          "predictions_median_relative_l2_error": 0.07168827948833559
+        },
+        {
+          "prompt_id": "numeracy-058",
+          "predictions_median_relative_l2_error": 0.08310609193120122
+        },
+        {
+          "prompt_id": "numeracy-072",
+          "predictions_median_relative_l2_error": 0.11010952424718118
+        },
+        {
+          "prompt_id": "numeracy-086",
+          "predictions_median_relative_l2_error": 0.05065400302620675
+        },
+        {
+          "prompt_id": "numeracy-101",
+          "predictions_median_relative_l2_error": 0.11057716920909881
+        },
+        {
+          "prompt_id": "numeracy-115",
+          "predictions_median_relative_l2_error": 0.08554988632175978
+        },
+        {
+          "prompt_id": "numeracy-129",
+          "predictions_median_relative_l2_error": 0.11019754056170528
+        },
+        {
+          "prompt_id": "numeracy-143",
+          "predictions_median_relative_l2_error": 0.09227805743194317
+        },
+        {
+          "prompt_id": "numeracy-157",
+          "predictions_median_relative_l2_error": 0.09478112299793598
+        },
+        {
+          "prompt_id": "numeracy-172",
+          "predictions_median_relative_l2_error": 0.07798339601726947
+        },
+        {
+          "prompt_id": "numeracy-186",
+          "predictions_median_relative_l2_error": 0.09697463260400976
+        },
+        {
+          "prompt_id": "numeracy-193",
+          "predictions_median_relative_l2_error": 0.10723627678259773
+        },
+        {
+          "prompt_id": "spatial-relationship-008",
+          "predictions_median_relative_l2_error": 0.07973501831510404
+        },
+        {
+          "prompt_id": "spatial-relationship-015",
+          "predictions_median_relative_l2_error": 0.13943255616612793
+        },
+        {
+          "prompt_id": "spatial-relationship-029",
+          "predictions_median_relative_l2_error": 0.08859052139399501
+        },
+        {
+          "prompt_id": "spatial-relationship-044",
+          "predictions_median_relative_l2_error": 0.08590715058449461
+        },
+        {
+          "prompt_id": "spatial-relationship-058",
+          "predictions_median_relative_l2_error": 0.07532153984445845
+        },
+        {
+          "prompt_id": "spatial-relationship-072",
+          "predictions_median_relative_l2_error": 0.06783593902343506
+        },
+        {
+          "prompt_id": "spatial-relationship-086",
+          "predictions_median_relative_l2_error": 0.0878752673789854
+        },
+        {
+          "prompt_id": "spatial-relationship-101",
+          "predictions_median_relative_l2_error": 0.06724212985198785
+        },
+        {
+          "prompt_id": "spatial-relationship-115",
+          "predictions_median_relative_l2_error": 0.08998711814924021
+        },
+        {
+          "prompt_id": "spatial-relationship-129",
+          "predictions_median_relative_l2_error": 0.10356865171464259
+        },
+        {
+          "prompt_id": "spatial-relationship-143",
+          "predictions_median_relative_l2_error": 0.15015323537758096
+        },
+        {
+          "prompt_id": "spatial-relationship-157",
+          "predictions_median_relative_l2_error": 0.06422840234004375
+        },
+        {
+          "prompt_id": "spatial-relationship-172",
+          "predictions_median_relative_l2_error": 0.12345343927161104
+        },
+        {
+          "prompt_id": "spatial-relationship-186",
+          "predictions_median_relative_l2_error": 0.08932934609138514
+        },
+        {
+          "prompt_id": "spatial-relationship-193",
+          "predictions_median_relative_l2_error": 0.07637066039216613
+        }
+      ]
+    }
+  ]
+}
