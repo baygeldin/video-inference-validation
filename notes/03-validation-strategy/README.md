@@ -113,3 +113,42 @@ That does not necessarily mean lower-quality outputs. The INT4 generations are o
 - Full-model pilot outputs from the previous experiment: `notes/02-intermediate-artifacts/artifacts/h100_sxm__default`
 
 It is also worth noting that across 105 examples, the median per-prompt relative L2 error for the INT4 model is `0.08555`, corresponding to a similarity score of `0.921`. The worst per-prompt median is `0.15015`, corresponding to a similarity score of `0.869` (see `notes/03-validation-strategy/artifacts/comparisons/medium__h100_int4_vs_h100.json`).
+
+---
+
+### Original model examples
+
+Two cars collide at an intersection
+
+https://github.com/user-attachments/assets/80ad1168-f35b-43e4-8ec3-b3ee21729d9a
+
+A rabbit wears a detective hat and a cat drives a toy car
+
+https://github.com/user-attachments/assets/41e3da4b-7f59-4899-843e-a79f80d1f026
+
+Five chairs sit around a campfire, and seven people roasting marshmallows.
+
+https://github.com/user-attachments/assets/6c261baf-55af-42cf-a6ac-70bb03173610
+
+A boy reading behind a bench
+
+https://github.com/user-attachments/assets/d7a109e5-8cb2-4e4e-bf33-c5a00974c0c2
+
+
+### INT4 quantized model examples
+
+Two cars collide at an intersection
+
+https://github.com/user-attachments/assets/05aef5d8-aa46-4c2b-a3a3-0cf5ed67dcf4
+
+A rabbit wears a detective hat and a cat drives a toy car
+
+https://github.com/user-attachments/assets/e6ab2f94-abb9-497f-a124-a597353edc3a
+
+Five chairs sit around a campfire, and seven people roasting marshmallows.
+
+https://github.com/user-attachments/assets/e2fcab41-8fab-4753-8176-9100c397a430
+
+A boy reading behind a bench
+
+https://github.com/user-attachments/assets/7ec2ee7a-8f9b-4612-9b9d-126070706bed
