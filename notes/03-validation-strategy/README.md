@@ -17,21 +17,24 @@ I believe the second option is preferable, as explained in the conclusion.
 
 ## Experiment design
 
-I generated a larger prompt set for this experiment:
+I used two prompt sets in this experiment:
 
 - `medium`: 105 examples, with 15 prompts from each T2V-CompBench category.
-- `pilot`: the 14 examples used in the earlier experiments, reused here for detailed per-step plots.
+- `pilot`: the 14 examples used in the earlier experiments.
 
 For the `medium` set, I generated each prompt on H100 in two configurations:
 
 - H100 default, full model.
-- H100 INT4 quantization. More precisely, this is W4A16: 4-bit weights with 16-bit activations/math.
+- H100 INT4 quantization.
 
-Then I compared the saved prediction traces in three validation settings:
+Then I compared the saved prediction traces in two main validation settings:
 
 - **Malicious case:** H100 INT4 executor checked by an H100 full-model verifier.
-- **Initial honest case:** H100 full-model executor checked by a two-GPU A100 TP=2 verifier.
-- **Sanity-check honest case:** H100 full-model executor checked by a single-A100 verifier without tensor parallelism.
+- **Honest case:** H100 full-model executor checked by an A100 TP=2 verifier.
+
+The idea was to make the malicious case as hard to catch as possible by validating it on the same GPU model as the executor. For the honest case, I initially chose the A100 TP=2 verifier because I expected it to be a difficult benign hardware difference.
+
+I also ran an additional sanity check on the smaller dataset: H100 full-model executor checked by a single A100 verifier without tensor parallelism. That check is what exposed the hardware-dependence problem discussed below.
 
 For each comparison, I pinned the initial latent and prompt embeddings. At each denoising step, the verifier recomputed the model prediction, compared it with the executor's saved prediction, and then advanced the scheduler using the executor's saved prediction. That keeps the executor and verifier model states synchronized after every step, so the metric measures per-step prediction disagreement rather than accumulated latent drift.
 
