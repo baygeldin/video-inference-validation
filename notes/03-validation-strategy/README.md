@@ -10,8 +10,8 @@ The short answer is: **full traces help, but the result still depends heavily on
 
 For Wan2.2-T2V-A14B, the practical choices are:
 
-- Restrict validation to calibrated executor/verifier hardware pairs.
-- Deploy the quantized model as the baseline model, if its quality is acceptable.
+- **Restrict validation to calibrated executor/verifier hardware pairs.**
+- **Deploy the quantized model as the baseline model**, if its quality is acceptable.
 
 I believe the second option is preferable, as explained in the conclusion.
 
@@ -38,7 +38,7 @@ I also ran an additional sanity check on the smaller dataset: H100 full-model ex
 
 For each comparison, I pinned the initial latent and prompt embeddings. At each denoising step, the verifier recomputed the model prediction, compared it with the executor's saved prediction, and then advanced the scheduler using the executor's saved prediction. That keeps the executor and verifier model states synchronized after every step, so the metric measures per-step prediction disagreement rather than accumulated latent drift.
 
-The target was strict: choose thresholds that reject **0 honest runs** while catching as many dishonest runs as possible.
+The target was strict: choose thresholds that **reject 0 honest runs while catching as many dishonest runs as possible**.
 
 ## Validation metric
 
@@ -51,7 +51,7 @@ relative_l2_error = ||y - x||_2 / ||x||_2
 similarity = 1 / (1 + relative_l2_error)
 ```
 
-For each prompt, I first used median per-step relative L2 error as the aggregate score. The early results showed that aggregating over all denoising steps is not effective for Wan2.2-T2V-A14B. Because this is an MoE model, validation needed two separate thresholds: one for the steps where the high-noise expert is active, and one for the steps where the low-noise expert is active.
+For each prompt, I first used median per-step relative L2 error as the aggregate score. The early results showed that **aggregating over all denoising steps is not effective** for Wan2.2-T2V-A14B. Because this is an MoE model, validation needed **two separate thresholds**: one for the steps where the high-noise expert is active, and one for the steps where the low-noise expert is active.
 
 With 40 denoising steps and the default boundary ratio of `0.875`, the high-noise expert is active on *steps 1-17*, and the low-noise expert is active on *steps 18-40*.
 
@@ -59,11 +59,11 @@ This matches recent work on W4A4 quantization of Wan2.2-I2V, which reports that 
 
 ## Results
 
-After calibration against the "H100 executor -> A100 TP=2 verifier" honest case, the two-bucket threshold cleanly separated the INT4 runs from the honest runs. INT4 runs could pass the high-noise expert threshold, but failed the low-noise expert threshold.
+After calibration against the "H100 executor -> A100 TP=2 verifier" honest case, the **two-bucket threshold cleanly separated the INT4 runs from the honest runs**. INT4 runs could pass the high-noise expert threshold, but failed the low-noise expert threshold.
 
 This leaves one caveat: an executor could run the high-noise steps on the quantized model, then switch to the full model for the low-noise steps. In practice, that strategy does not look very attractive. It requires switching model variants mid-generation, saves less compute than running INT4 end to end, and the high-noise INT4 steps appear close enough to honest generations that the end user is unlikely to notice the difference anyway.
 
-However, that result did not survive the sanity check. When the honest verifier was a single A100 rather than two A100s with TP=2, the low-noise bucket moved into the same range as INT4 (the plots below were generated from the comparison files in `notes/03-validation-strategy/artifacts/comparisons`):
+However, that result *did not survive the sanity check*. When the honest verifier was a single A100 rather than two A100s with TP=2, the low-noise bucket moved into the same range as INT4 (the plots below were generated from the comparison files in `notes/03-validation-strategy/artifacts/comparisons`):
 
 <img src="plots/action-binding-001.png" alt="Relative L2 error by step for action-binding-001" width="500">
 
@@ -101,9 +101,9 @@ It is not clear exactly why the A100 TP=2 configuration performs better than a s
 
 For Wan2.2-T2V-A14B, I do not think we can reliably distinguish the full model from the INT4 model across arbitrary verifier hardware. The malicious deviation is too close to normal numeric drift from some honest verifier configurations.
 
-One solution is to narrow validation to the exact same GPU configuration. This may be possible in a large network, but it assumes there is always a verifier available with the same GPU configuration and the same model variant as the executor. That requires a separate threat analysis. We could also loosen the requirement slightly by identifying specific GPU pairs that are workable. For example, if a B200 executor could be verified by an H200 verifier while still catching every dishonest inference, that pair could be allowed. However, this would complicate the protocol even more and require cross-calibration across many GPU combinations.
+One solution is to *narrow validation to the exact same GPU configuration*. This may be possible in a large network, but it assumes there is always a verifier available with the same GPU configuration and the same model variant as the executor. That requires a separate threat analysis. We could also loosen the requirement slightly by identifying specific GPU pairs that are workable. For example, if a B200 executor could be verified by an H200 verifier while still catching every dishonest inference, that pair could be allowed. However, this would complicate the protocol even more and require cross-calibration across many GPU combinations.
 
-The safest strategy for a decentralized network is to deploy the "least common denominator" model variant: choose a baseline that does not have a cheaper counterpart capable of passing as that baseline. For such models, validation thresholds can be generous enough to absorb benign hardware differences.
+The safest strategy for a decentralized network is to **deploy the "least common denominator" model variant**: choose a baseline that does not have a cheaper counterpart capable of passing as that baseline. For such models, validation thresholds can be generous enough to absorb benign hardware differences.
 
 That does not necessarily mean lower-quality outputs. The INT4 generations are often close to the full-model generations, and some could even be subjectively better. You can compare:
 
