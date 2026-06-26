@@ -42,54 +42,28 @@ The target was strict: choose thresholds that reject **0 honest runs** while cat
 
 ## Validation metric
 
-I tested several prediction-tensor closeness metrics:
+I tested several prediction-tensor closeness metrics: relative L1 error, relative L2 error, cosine similarity, and a TOPLOC-inspired metric that compares the top-k high-magnitude values in the prediction tensor. The TOPLOC-inspired variant was based on the idea that high-magnitude activations may be more stable under GPU nondeterminism.
 
-- Relative L1 error.
-- Relative L2 error.
-- Cosine similarity.
-- A TOPLOC-inspired top-k comparison over high-magnitude values in the prediction tensor.
-
-The best-performing metric was also the simplest: **relative L2 error**. For a saved executor prediction `x` and verifier prediction `y`, the comparison is:
+The best-performing metric turned out to also be the simplest: **relative L2 error**. For a saved executor prediction `x` and verifier prediction `y`, the comparison is:
 
 ```text
 relative_l2_error = ||y - x||_2 / ||x||_2
 similarity = 1 / (1 + relative_l2_error)
 ```
 
-For each prompt, I used median per-step relative L2 error as the aggregate score. For thresholding, I also split the denoising steps by the Wan2.2 expert boundary:
+For each prompt, I first used median per-step relative L2 error as the aggregate score. The early results showed that aggregating over all denoising steps is not effective for Wan2.2-T2V-A14B. Because this is an MoE model, validation needed two separate thresholds: one for the steps where the high-noise expert is active, and one for the steps where the low-noise expert is active.
 
-- **High-noise expert:** steps `0-16`, where `sigma >= 0.875`.
-- **Low-noise expert:** steps `17-39`, where `sigma < 0.875`.
+With 40 denoising steps and the default boundary ratio of `0.875`, the high-noise expert is active on *steps 1-17*, and the low-noise expert is active on *steps 18-40*.
 
-The split matters because Wan2.2 uses different experts before and after the boundary. This is also consistent with recent Wan2.2 quantization work, which notes that the high-noise and low-noise experts have distinct quantization sensitivities ([arXiv:2605.27003](https://arxiv.org/abs/2605.27003)).
+This matches recent work on W4A4 quantization of Wan2.2-I2V, which reports that "high-noise and low-noise experts exhibit distinct quantization sensitivities that a single global calibration policy cannot capture" ([arXiv:2605.27003](https://arxiv.org/abs/2605.27003)).
 
 ## Results
 
-The first result was encouraging. When the honest reference was H100 executor -> two-GPU A100 TP=2 verifier, a two-bucket threshold separated the INT4 runs from the honest runs.
+After calibration against the "H100 executor -> A100 TP=2 verifier" honest case, the two-bucket threshold cleanly separated the INT4 runs from the honest runs. INT4 runs could pass the high-noise expert threshold, but failed the low-noise expert threshold.
 
-The separation came from the low-noise bucket:
+This leaves one caveat: an executor could run the high-noise steps on the quantized model, then switch to the full model for the low-noise steps. In practice, that strategy does not look very attractive. It requires switching model variants mid-generation, saves less compute than running INT4 end to end, and the high-noise INT4 steps appear close enough to honest generations that the end user is unlikely to notice the difference anyway.
 
-- H100 honest -> two-GPU A100 TP=2 low-noise per-prompt medians: max `0.029`.
-- H100 INT4 -> H100 low-noise per-prompt medians: min `0.048`.
-
-So, under this verifier assumption, every INT4 pilot prompt failed while every honest H100 -> two-GPU A100 TP=2 prompt passed.
-
-However, that result did not survive the sanity check. When the honest verifier was a single A100 rather than two A100s with TP=2, the low-noise bucket moved into the same range as INT4:
-
-- H100 honest -> single-A100 low-noise per-prompt medians: `0.043` to `0.096`.
-- H100 INT4 -> H100 low-noise per-prompt medians: `0.048` to `0.102`.
-
-That overlap is the core problem. A threshold permissive enough to accept the single-A100 honest verifier would also accept at least some INT4 executions. A threshold strict enough to catch INT4 would reject honest single-A100 verification.
-
-The likely explanation is kernel-level numeric behavior. The two-GPU A100 TP=2 setup appears to use a kernel path that happens to land closer to H100 numerics after the expert boundary, while the single-A100 setup lands farther away. The important point is not the exact kernel detail; it is that normal verifier configuration changes can be as large as the malicious quantization deviation.
-
-### Per-prompt traces
-
-The plots below were generated from the comparison files in `notes/03-validation-strategy/artifacts/comparisons`. Each plot shows relative L2 error by denoising step for one pilot prompt:
-
-- Blue: H100 honest executor -> two-GPU A100 TP=2 verifier.
-- Green: H100 honest executor -> single-A100 verifier.
-- Red: H100 INT4 executor -> H100 verifier.
+However, that result did not survive the sanity check. When the honest verifier was a single A100 rather than two A100s with TP=2, the low-noise bucket moved into the same range as INT4 (the plots below were generated from the comparison files in `notes/03-validation-strategy/artifacts/comparisons`):
 
 <img src="plots/action-binding-001.png" alt="Relative L2 error by step for action-binding-001" width="500">
 
@@ -119,11 +93,13 @@ The plots below were generated from the comparison files in `notes/03-validation
 
 <img src="plots/spatial-relationship-200.png" alt="Relative L2 error by step for spatial-relationship-200" width="500">
 
+That overlap is the core problem. A threshold permissive enough to accept the single-A100 honest verifier would also accept many INT4 executions. A threshold strict enough to catch INT4 would reject honest single-A100 verification.
+
+It is not clear exactly why the A100 TP=2 configuration performs better than a single A100. It is counterintuitive because TP=2 introduces more hardware variation, but the likely explanation is that the A100 TP=2 setup uses a kernel path that happens to land closer to H100 numerics than the single-A100 setup.
+
 ## Implications
 
-The high-noise bucket does not provide enough separation to catch INT4 reliably. An executor could run the high-noise steps with the quantized model, switch to the full model for low-noise steps, and plausibly pass the bucketed validation. That strategy is probably not very attractive in practice, because it requires switching model variants mid-generation and gives less benefit than running INT4 end to end. Still, it shows that the validation signal is not uniformly strong across the denoising trajectory.
-
-The bigger issue is the single-A100 sanity check. It shows that **the validation threshold is not only model-dependent; it is executor/verifier-pair-dependent**. For a decentralized network, that is operationally awkward:
+Two implications follow from these results. First, the validation signal is not uniformly strong across the denoising trajectory: the high-noise bucket is weak enough that partial INT4 execution could plausibly pass. Second, and more importantly, the single-A100 sanity check shows that **the validation threshold is not only model-dependent; it is executor/verifier-pair-dependent**. For a decentralized network, that is operationally awkward:
 
 - The network would need to know which GPU and kernel combinations can validate each other.
 - Each accepted pair would need calibration data and thresholds.
